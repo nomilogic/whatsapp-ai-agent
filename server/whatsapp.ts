@@ -17,14 +17,17 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-// Initialize Gemini
-const gemini = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+// Initialize Gemini (conditionally)
+let gemini: GoogleGenAI | null = null;
+if (process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+  gemini = new GoogleGenAI({
+    apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+    httpOptions: {
+      apiVersion: "",
+      baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+    },
+  });
+}
 
 let sock: WASocket | null = null;
 let qrCode: string | null = null;
@@ -145,9 +148,9 @@ export async function setupWhatsApp(storage: IStorage) {
             
             let replyContent = "";
 
-            if (provider === 'gemini') {
+            if (provider === 'gemini' && gemini) {
               const geminiModelSetting = await storage.getSetting('gemini_model');
-              const model = geminiModelSetting?.value || 'gemini-3-flash-preview';
+              const model = geminiModelSetting?.value || 'gemini-2.5-pro';
               
               const chatMessages = history.map(h => ({
                 role: h.role === 'user' ? 'user' : 'model',
@@ -165,6 +168,8 @@ export async function setupWhatsApp(storage: IStorage) {
                 contents: chatMessages as any,
               });
               replyContent = result.text || "I'm sorry, I couldn't process that.";
+            } else if (provider === 'gemini' && !gemini) {
+              replyContent = "Gemini is not configured. Please set up the Gemini API key.";
             } else {
               const messages = history.map(h => ({
                 role: h.role as 'user' | 'assistant' | 'system',

@@ -7,8 +7,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+
+const GEMINI_MODELS = [
+  "gemini-3.0-pro-preview",
+  "gemini-3.0-flash-preview",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "imagen-4.0-generate-001",
+  "imagen-4.0-ultra-generate-001",
+  "imagen-3.0-generate-002",
+  "imagen-3.0-fast-generate-001"
+];
+
+const OPENAI_MODELS = [
+  "gpt-4o",
+  "gpt-4o-mini",
+  "gpt-4-turbo",
+  "gpt-4",
+  "gpt-3.5-turbo"
+];
 
 export default function SettingsPage() {
   const { data: settings, isLoading } = useSettings();
@@ -128,13 +151,19 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
-                  <Label htmlFor="model">AI Model</Label>
-                  <Input 
-                    id="model"
-                    defaultValue={getSettingValue('openai_model') || 'gpt-4o'}
-                    onBlur={(e) => handleUpdate('openai_model', e.target.value)}
-                    className="font-mono text-sm"
-                  />
+                  <Label htmlFor="ai_provider">AI Provider</Label>
+                  <Select 
+                    value={getSettingValue('ai_provider') || 'gemini'}
+                    onValueChange={(value) => handleUpdate('ai_provider', value)}
+                  >
+                    <SelectTrigger id="ai_provider" className="font-mono text-sm" data-testid="select-ai-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="gemini">Gemini</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-3">
                   <Label htmlFor="temp">Temperature (Creativity)</Label>
@@ -147,9 +176,51 @@ export default function SettingsPage() {
                     defaultValue={getSettingValue('temperature') || '0.7'}
                     onBlur={(e) => handleUpdate('temperature', e.target.value)}
                     className="font-mono text-sm"
+                    data-testid="input-temperature"
                   />
                 </div>
               </div>
+
+              {getSettingValue('ai_provider') === 'openai' && (
+                <div className="space-y-3">
+                  <Label htmlFor="openai_model">OpenAI Model</Label>
+                  <Select 
+                    value={getSettingValue('openai_model') || 'gpt-4o'}
+                    onValueChange={(value) => handleUpdate('openai_model', value)}
+                  >
+                    <SelectTrigger id="openai_model" className="font-mono text-sm" data-testid="select-openai-model">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPENAI_MODELS.map((model) => (
+                        <SelectItem key={model} value={model}>{model}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {(getSettingValue('ai_provider') === 'gemini' || !getSettingValue('ai_provider')) && (
+                <div className="space-y-3">
+                  <Label htmlFor="gemini_model">Gemini Model</Label>
+                  <Select 
+                    value={getSettingValue('gemini_model') || 'gemini-2.5-pro'}
+                    onValueChange={(value) => handleUpdate('gemini_model', value)}
+                  >
+                    <SelectTrigger id="gemini_model" className="font-mono text-sm" data-testid="select-gemini-model">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GEMINI_MODELS.map((model) => (
+                        <SelectItem key={model} value={model}>{model}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Choose from Gemini chat models or Imagen image generation models.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
