@@ -4,12 +4,18 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupWhatsApp } from "./whatsapp";
+import { registerChatRoutes } from "./replit_integrations/chat";
+import { registerImageRoutes } from "./replit_integrations/image";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
+  // Register Replit AI Integrations
+  registerChatRoutes(app);
+  registerImageRoutes(app);
+
   // Initialize WhatsApp Service
   const whatsAppService = await setupWhatsApp(storage);
 
