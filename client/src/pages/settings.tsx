@@ -253,9 +253,29 @@ export default function SettingsPage() {
                     }
                   }}
                   className="font-mono text-sm"
+                  data-testid="input-openai-api-key"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Required for generating AI responses. Stored securely.
+                  Required when using OpenAI as your AI provider.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <Label htmlFor="gemini_key">Gemini API Key</Label>
+                <Input 
+                  id="gemini_key"
+                  type="password"
+                  placeholder="AIza..."
+                  defaultValue={getSettingValue('gemini_api_key')}
+                  onBlur={(e) => {
+                    if (e.target.value && e.target.value !== getSettingValue('gemini_api_key')) {
+                      handleUpdate('gemini_api_key', e.target.value);
+                    }
+                  }}
+                  className="font-mono text-sm"
+                  data-testid="input-gemini-api-key"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required when using Gemini as your AI provider. Get your key from Google AI Studio.
                 </p>
               </div>
             </CardContent>
