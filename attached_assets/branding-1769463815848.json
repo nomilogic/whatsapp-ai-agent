@@ -1,0 +1,81 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "Arial",
+      "count": 7
+    },
+    {
+      "family": "sans",
+      "count": 6
+    },
+    {
+      "family": "sans-serif",
+      "count": 6
+    }
+  ],
+  "colors": {
+    "primary": "#4285F4",
+    "accent": "#1A73E8",
+    "background": "#FFFFFF",
+    "textPrimary": "#1A73E8",
+    "link": "#1A73E8"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "sans",
+      "heading": "sans"
+    },
+    "fontStacks": {
+      "body": [
+        "sans",
+        "Arial",
+        "sans-serif"
+      ],
+      "heading": [
+        "sans",
+        "Arial",
+        "sans-serif"
+      ],
+      "paragraph": [
+        "sans",
+        "Arial",
+        "sans-serif"
+      ]
+    },
+    "fontSizes": {
+      "h1": "24px",
+      "h2": "24px",
+      "body": "15px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "5px"
+  },
+  "components": {},
+  "images": {
+    "logo": null,
+    "favicon": null,
+    "ogImage": null
+  },
+  "__framework_hints": [],
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "secondary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "confidence": 0
+  },
+  "confidence": {
+    "buttons": 0,
+    "colors": 0,
+    "overall": 0
+  }
+}

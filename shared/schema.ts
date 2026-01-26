@@ -127,7 +127,7 @@ export type InsertCoreIdentity = z.infer<typeof insertCoreIdentitySchema>;
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 
-// API Request/Response Types
+export * from "./models/chat";
 
 export type AgentStatus = {
   connected: boolean;
