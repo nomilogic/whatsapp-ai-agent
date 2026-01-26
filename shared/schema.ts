@@ -1,18 +1,96 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// === TABLE DEFINITIONS ===
+
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  remoteJid: text("remote_jid").notNull().unique(), // WhatsApp ID (e.g., 1234567890@s.whatsapp.net)
+  name: text("name"),
+  pushName: text("push_name"),
+  platform: text("platform").default("whatsapp"),
+  type: text("type").default("individual"), // individual or group
+  metadata: jsonb("metadata"), // For any extra WhatsApp info
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  role: text("role").notNull(), // 'user' (received) or 'assistant' (sent) or 'system'
+  content: text("content").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  whatsappId: text("whatsapp_id"), // Message ID from Baileys
+  status: text("status").default("sent"), // sent, delivered, read, failed
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(), // e.g., 'openai_api_key', 'system_prompt', 'auto_reply'
+  value: text("value").notNull(),
+  description: text("description"),
+  category: text("category").default("general"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// === RELATIONS ===
+
+export const contactsRelations = relations(contacts, ({ many }) => ({
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [messages.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+// === BASE SCHEMAS ===
+
+export const insertContactSchema = createInsertSchema(contacts).omit({ 
+  id: true, 
+  lastMessageAt: true, 
+  createdAt: true 
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({ 
+  id: true, 
+  timestamp: true 
+});
+
+export const insertSettingSchema = createInsertSchema(settings).omit({ 
+  id: true, 
+  updatedAt: true 
+});
+
+// === EXPLICIT API CONTRACT TYPES ===
+
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = z.infer<typeof insertContactSchema>;
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
+
+// API Request/Response Types
+
+export type AgentStatus = {
+  connected: boolean;
+  qrCode?: string; // Base64 QR code or terminal string
+  connecting: boolean;
+  lastError?: string;
+};
+
+export type SendMessageRequest = {
+  content: string;
+};
+
+export type UpdateSettingRequest = {
+  value: string;
+};
