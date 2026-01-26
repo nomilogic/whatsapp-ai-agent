@@ -9,11 +9,21 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import { type IStorage } from './storage';
 import OpenAI from 'openai';
+import { GoogleGenAI } from "@google/genai";
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+// Initialize Gemini
+const gemini = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+  },
 });
 
 let sock: WASocket | null = null;
@@ -110,27 +120,67 @@ export async function setupWhatsApp(storage: IStorage) {
             
             // Get History
             const history = await storage.getMessages(contact.id);
-            const messages = history.map(h => ({
-              role: h.role as 'user' | 'assistant' | 'system',
-              content: h.content
-            }));
+            
+            // Get Identity and Context for Personalized Response
+            const identity = await storage.getIdentity();
+            const systemPromptSetting = await storage.getSetting('system_prompt');
+            
+            let systemContent = systemPromptSetting?.value || "You are a helpful assistant.";
+            
+            if (identity) {
+              systemContent += `\nYour name is ${identity.name}.`;
+              systemContent += `\nPersonality: ${JSON.stringify(identity.personalityTraits)}`;
+              if (identity.values?.length) systemContent += `\nValues: ${identity.values.join(', ')}`;
+              if (identity.interests?.length) systemContent += `\nInterests: ${identity.interests.join(', ')}`;
+            }
 
-            // Get System Prompt
-            const systemPrompt = await storage.getSetting('system_prompt');
-            if (systemPrompt) {
-              messages.unshift({ role: 'system', content: systemPrompt.value });
+            // Relationship Context
+            if (contact.relationshipType) {
+              systemContent += `\nRelationship with this contact: ${contact.relationshipType} (Level: ${contact.relationshipLevel})`;
             }
 
             // Get AI Response
-            const modelSetting = await storage.getSetting('openai_model');
-            const model = modelSetting?.value || 'gpt-4o';
+            const providerSetting = await storage.getSetting('ai_provider');
+            const provider = providerSetting?.value || 'gemini';
+            
+            let replyContent = "";
 
-            const completion = await openai.chat.completions.create({
-              messages: messages as any,
-              model: model,
-            });
+            if (provider === 'gemini') {
+              const geminiModelSetting = await storage.getSetting('gemini_model');
+              const model = geminiModelSetting?.value || 'gemini-3-flash-preview';
+              
+              const chatMessages = history.map(h => ({
+                role: h.role === 'user' ? 'user' : 'model',
+                parts: [{ text: h.content }]
+              }));
+              
+              // Prepend system instruction
+              chatMessages.unshift({
+                role: 'user',
+                parts: [{ text: `SYSTEM INSTRUCTION: ${systemContent}` }]
+              });
 
-            const replyContent = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that.";
+              const result = await gemini.models.generateContent({
+                model: model,
+                contents: chatMessages as any,
+              });
+              replyContent = result.text || "I'm sorry, I couldn't process that.";
+            } else {
+              const messages = history.map(h => ({
+                role: h.role as 'user' | 'assistant' | 'system',
+                content: h.content
+              }));
+              messages.unshift({ role: 'system', content: systemContent });
+
+              const modelSetting = await storage.getSetting('openai_model');
+              const model = modelSetting?.value || 'gpt-4o';
+
+              const completion = await openai.chat.completions.create({
+                messages: messages as any,
+                model: model,
+              });
+              replyContent = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that.";
+            }
 
             // 4. Send Reply
             await sock?.sendMessage(remoteJid, { text: replyContent });
@@ -167,3 +217,4 @@ export async function setupWhatsApp(storage: IStorage) {
     }
   };
 }
+
