@@ -1,1 +1,1 @@
-export { TaskManager, type Task, TaskType, TaskStatus, TaskPriority, type TaskStatistics, taskManager } from "./taskManager";
+export { TaskManager, type Task, TaskType, TaskStatus, TaskPriority, taskManager } from "./taskManager";

@@ -141,7 +141,7 @@ export class AnalyticsEngine {
       strengthScore,
       connectionType: contact.relationshipType || "unknown",
       communicationStyle: this.determineCommunicationStyle(metrics),
-      importanceScore: this.calculateImportanceScore(contact, metrics),
+      importanceScore: this.calculateImportanceScore({ relationshipType: contact.relationshipType || undefined }, metrics),
       engagementLevel,
       recommendations,
     };
@@ -209,7 +209,6 @@ export class AnalyticsEngine {
     }
 
     return {
-      topicsFound: topicFrequencies,
       topics: topicFrequencies,
       averageMessagesPerDay,
       mostActiveDay,
@@ -364,7 +363,7 @@ export class AnalyticsEngine {
    */
   private generateRelationshipRecommendations(
     metrics: InteractionMetrics,
-    contact: { name: string | null },
+    contact: { name: string | null; relationshipType?: string | null },
     engagementLevel: string
   ): string[] {
     const recommendations: string[] = [];

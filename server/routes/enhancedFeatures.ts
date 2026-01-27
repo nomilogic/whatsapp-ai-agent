@@ -21,7 +21,7 @@ export const enhancedFeaturesRouter = Router();
  */
 enhancedFeaturesRouter.get("/memory/:contactId", async (req: Request, res: Response) => {
   try {
-    const contactId = parseInt(req.params.contactId);
+    const contactId = parseInt(req.params.contactId as string);
     const insights = await memoryManager.getMemoryInsights(contactId);
     res.json(insights);
   } catch (error: any) {
@@ -35,7 +35,7 @@ enhancedFeaturesRouter.get("/memory/:contactId", async (req: Request, res: Respo
  */
 enhancedFeaturesRouter.post("/memory/:contactId", async (req: Request, res: Response) => {
   try {
-    const contactId = parseInt(req.params.contactId);
+    const contactId = parseInt(req.params.contactId as string);
     const { content, category } = req.body;
 
     const memory = await memoryManager.storeUserMemory(contactId, content, category);
@@ -51,7 +51,7 @@ enhancedFeaturesRouter.post("/memory/:contactId", async (req: Request, res: Resp
  */
 enhancedFeaturesRouter.get("/memory/:contactId/search", async (req: Request, res: Response) => {
   try {
-    const contactId = parseInt(req.params.contactId);
+    const contactId = parseInt(req.params.contactId as string);
     const query = req.query.q as string;
 
     if (!query) {
@@ -73,8 +73,8 @@ enhancedFeaturesRouter.get(
   "/memory/:contactId/category/:category",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
-      const category = req.params.category;
+      const contactId = parseInt(req.params.contactId as string);
+      const category = req.params.category as string;
 
       const memories = await memoryManager.getMemoryByCategory(
         contactId,
@@ -95,7 +95,7 @@ enhancedFeaturesRouter.get(
  */
 enhancedFeaturesRouter.get("/tasks/:contactId", async (req: Request, res: Response) => {
   try {
-    const contactId = parseInt(req.params.contactId);
+    const contactId = parseInt(req.params.contactId as string);
     const status = req.query.status as string | undefined;
 
     const tasks = await taskManager.getTasksForContact(contactId, status as any);
@@ -113,7 +113,7 @@ enhancedFeaturesRouter.get("/tasks/:contactId", async (req: Request, res: Respon
  */
 enhancedFeaturesRouter.post("/tasks/:contactId", async (req: Request, res: Response) => {
   try {
-    const contactId = parseInt(req.params.contactId);
+    const contactId = parseInt(req.params.contactId as string);
     const { description, type, priority, deadline } = req.body;
 
     const task = await taskManager.createTask(
@@ -136,7 +136,7 @@ enhancedFeaturesRouter.post("/tasks/:contactId", async (req: Request, res: Respo
  */
 enhancedFeaturesRouter.patch("/tasks/:taskId", async (req: Request, res: Response) => {
   try {
-    const taskId = req.params.taskId;
+    const taskId = req.params.taskId as string;
     const { status } = req.body;
 
     const task = await taskManager.updateTaskStatus(taskId, status);
@@ -156,7 +156,7 @@ enhancedFeaturesRouter.patch("/tasks/:taskId", async (req: Request, res: Respons
  */
 enhancedFeaturesRouter.get("/tasks/upcoming", async (req: Request, res: Response) => {
   try {
-    const hours = parseInt(req.query.hours as string) || 24;
+    const hours = parseInt((req.query.hours as string) || "24");
     const tasks = await taskManager.getUpcomingTasks(hours);
     res.json(tasks);
   } catch (error: any) {
@@ -174,7 +174,7 @@ enhancedFeaturesRouter.post(
   "/conversations/analyze/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
+      const contactId = parseInt(req.params.contactId as string);
       const { messages } = req.body;
 
       if (!messages || !Array.isArray(messages)) {
@@ -208,7 +208,7 @@ enhancedFeaturesRouter.get(
   "/messaging/proactive/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
+      const contactId = parseInt(req.params.contactId as string);
       const result = await proactiveMessager.shouldSendProactiveMessage(
         contactId
       );
@@ -227,8 +227,8 @@ enhancedFeaturesRouter.get(
   "/messaging/suggest/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
-      const type = req.query.type as string || "greeting";
+      const contactId = parseInt(req.params.contactId as string);
+      const type = (req.query.type as string) || "greeting";
 
       const message = await proactiveMessager.createContextualMessage(
         contactId,
@@ -249,7 +249,7 @@ enhancedFeaturesRouter.get(
   "/messaging/strategy/:relationshipType",
   (req: Request, res: Response) => {
     try {
-      const relationshipType = req.params.relationshipType;
+      const relationshipType = req.params.relationshipType as string;
       const strategy = proactiveMessager.getMessagingStrategy(relationshipType);
       res.json(strategy);
     } catch (error: any) {
@@ -268,7 +268,7 @@ enhancedFeaturesRouter.get(
   "/analytics/metrics/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
+      const contactId = parseInt(req.params.contactId as string);
       const metrics = await analyticsEngine.getInteractionMetrics(contactId);
       res.json(metrics);
     } catch (error: any) {
@@ -285,7 +285,7 @@ enhancedFeaturesRouter.get(
   "/analytics/insights/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
+      const contactId = parseInt(req.params.contactId as string);
       const insights = await analyticsEngine.getRelationshipInsights(contactId);
       res.json(insights);
     } catch (error: any) {
@@ -302,7 +302,7 @@ enhancedFeaturesRouter.get(
   "/analytics/weekly/:contactId",
   async (req: Request, res: Response) => {
     try {
-      const contactId = parseInt(req.params.contactId);
+      const contactId = parseInt(req.params.contactId as string);
       const insights = await analyticsEngine.getWeeklyInsights(contactId);
       res.json(insights);
     } catch (error: any) {
