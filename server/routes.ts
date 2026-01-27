@@ -6,6 +6,7 @@ import { z } from "zod";
 import { setupWhatsApp } from "./whatsapp";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
+import enhancedFeaturesRouter from "./routes/enhancedFeatures";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -15,6 +16,9 @@ export async function registerRoutes(
   // Register Replit AI Integrations
   registerChatRoutes(app);
   registerImageRoutes(app);
+
+  // Register Enhanced Features Routes (Memory, Tasks, Analytics, Messaging)
+  app.use("/api", enhancedFeaturesRouter);
 
   // Initialize WhatsApp Service
   const whatsAppService = await setupWhatsApp(storage);
