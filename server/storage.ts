@@ -106,7 +106,7 @@ export class DatabaseStorage implements IStorage {
     const defaults = [
       { key: "system_prompt", value: "You are a helpful assistant on WhatsApp. Keep your responses concise and friendly." },
       { key: "ai_provider", value: "gemini" },
-      { key: "gemini_model", value: "gemini-2.5-pro" },
+      { key: "gemini_model", value: "gemini-2.5-flash" },
       { key: "openai_model", value: "gpt-4o" },
       { key: "auto_reply", value: "true" },
     ];

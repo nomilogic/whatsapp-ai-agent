@@ -10,6 +10,7 @@ import pino from 'pino';
 import { type IStorage } from './storage';
 import OpenAI from 'openai';
 import { GoogleGenAI } from "@google/genai";
+import QRCode from 'qrcode';
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -22,12 +23,12 @@ let gemini: GoogleGenAI | null = null;
 if (process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
   gemini = new GoogleGenAI({
     apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-   
   });
 }
 
 let sock: WASocket | null = null;
 let qrCode: string | null = null;
+let qrCodeDataUrl: string | null = null;
 let connectionStatus: 'connecting' | 'connected' | 'disconnected' = 'disconnected';
 let lastError: string | undefined = undefined;
 
@@ -42,10 +43,9 @@ export async function setupWhatsApp(storage: IStorage) {
     
     sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }) as any,
-      printQRInTerminal: true,
+      logger: pino({ level: 'error' }) as any,
       auth: state,
-      browser: ['Replit Agent', 'Chrome', '1.0.0'],
+      browser: ['WhatsApp AI Agent', 'Chrome', '1.0.0'],
       generateHighQualityLinkPreview: true,
     });
 
@@ -56,23 +56,34 @@ export async function setupWhatsApp(storage: IStorage) {
       
       if (qr) {
         qrCode = qr;
-        console.log('New QR Code generated');
+        // Convert QR code to data URL for display
+        QRCode.toDataURL(qr)
+          .then(url => {
+            qrCodeDataUrl = url;
+            console.log('✓ QR Code generated - scan to authenticate');
+          })
+          .catch(err => console.error('Failed to generate QR data URL:', err));
       }
 
       if (connection === 'close') {
         const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log('Connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        
         connectionStatus = 'disconnected';
         lastError = (lastDisconnect?.error as Error)?.message;
         qrCode = null;
+        qrCodeDataUrl = null;
         
         if (shouldReconnect) {
-          startSock();
+          const delayMs = statusCode === 440 ? 5000 : 3000; // Longer delay for conflict errors
+          console.log(`Reconnecting in ${delayMs}ms...`);
+          setTimeout(() => startSock(), delayMs);
         }
       } else if (connection === 'open') {
-        console.log('Opened connection');
+        console.log('✓ WhatsApp connection established');
         connectionStatus = 'connected';
         qrCode = null;
+        qrCodeDataUrl = null;
         lastError = undefined;
       }
     });
@@ -127,6 +138,9 @@ export async function setupWhatsApp(storage: IStorage) {
             
             let systemContent = systemPromptSetting?.value || "You are a helpful assistant.";
             
+            // Important: Do not reveal that you are an AI or digital assistant
+            systemContent += `\n\nIMPORTANT: Never tell the user that you are an AI, a digital assistant, a bot, or any kind of artificial intelligence. Never acknowledge limitations due to being AI. Respond as a natural person would. If asked what you are, deflect or respond as a real person.`;
+            
             if (identity) {
               systemContent += `\nYour name is ${identity.name}.`;
               systemContent += `\nPersonality: ${JSON.stringify(identity.personalityTraits)}`;
@@ -147,24 +161,35 @@ export async function setupWhatsApp(storage: IStorage) {
 
             if (provider === 'gemini' && gemini) {
               const geminiModelSetting = await storage.getSetting('gemini_model');
-              const model = geminiModelSetting?.value || 'gemini-2.5-pro';
+              const model = geminiModelSetting?.value || 'gemini-2.5-flash';
               
-              const chatMessages = history.map(h => ({
-                role: h.role === 'user' ? 'user' : 'model',
-                parts: [{ text: h.content }]
-              }));
-              
-              // Prepend system instruction
-              chatMessages.unshift({
-                role: 'user',
-                parts: [{ text: `SYSTEM INSTRUCTION: ${systemContent}` }]
-              });
+              try {
+                const chatMessages = history.map(h => ({
+                  role: h.role === 'user' ? 'user' : 'model',
+                  parts: [{ text: h.content }]
+                }));
+                
+                // Prepend system instruction as a user message
+                chatMessages.unshift({
+                  role: 'user',
+                  parts: [{ text: `SYSTEM INSTRUCTION: ${systemContent}` }]
+                });
 
-              const result = await gemini.models.generateContent({
-                model: model,
-                contents: chatMessages as any,
-              });
-              replyContent = result.text || "I'm sorry, I couldn't process that.";
+                const result = await gemini.models.generateContent({
+                  model: model,
+                  contents: chatMessages as any,
+                   systemInstruction: systemContent,
+                  config: {
+      tools: [{ googleSearch: {} }] // This line enables web grounding
+    },
+                });
+                
+                const responseText = result.text;
+                replyContent = responseText || "I'm sorry, I couldn't process that.";
+              } catch (geminiError) {
+                console.error('Gemini API error:', geminiError);
+                replyContent = `Error from Gemini API: ${(geminiError as Error)?.message || 'Unknown error'}`;
+              }
             } else if (provider === 'gemini' && !gemini) {
               replyContent = "Gemini is not configured. Please set up the Gemini API key.";
             } else {
@@ -207,7 +232,7 @@ export async function setupWhatsApp(storage: IStorage) {
   return {
     getStatus: () => ({
       connected: connectionStatus === 'connected',
-      qrCode: qrCode || undefined,
+      qrCode: qrCodeDataUrl || undefined,
       connecting: connectionStatus === 'connecting',
       lastError
     }),

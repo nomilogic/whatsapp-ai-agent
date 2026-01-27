@@ -1,0 +1,49 @@
+
+> rest-express@1.0.0 dev
+> cross-env NODE_ENV=development tsx server/index.ts
+
+using WA v2.3000.1032141294, isLatest: true
+{"level":50,"time":1769513892682,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:38:14 PM [express] serving on port 5000
+{"level":50,"time":1769513899426,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+{"level":50,"time":1769513905833,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+{"level":50,"time":1769513912475,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:38:50 PM [express] GET /api/status 200 in 3ms :: {"connected":false,"connecting":true,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513930661,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:38:51 PM [express] GET /api/contacts 200 in 1221ms :: []
+4:38:54 PM [express] GET /api/status 200 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513937468,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:38:57 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:00 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:03 PM [express] GET /api/status 200 in 1ms :: {"connected":false,"connecting":true,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513944006,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+{"level":50,"time":1769513950411,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:39:15 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":true,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513956779,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:39:18 PM [express] GET /api/status 200 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513960457,"pid":3184,"hostname":"QASIM","error":{"data":null,"isBoom":true,"isServer":false,"output":{"statusCode":408,"payload":{"statusCode":408,"error":"Request Time-out","message":"Pre-key upload timeout"},"headers":{}}},"msg":"Failed to check/upload pre-keys during initialization"}
+4:39:21 PM [express] GET /api/status 200 in 1ms :: {"connected":false,"connecting":true,"lastError":"Stream Errored (conflict)"}
+Reconnecting in 5000ms...
+{"level":50,"time":1769513963513,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+4:39:24 PM [express] GET /api/status 200 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:27 PM [express] GET /api/status 304 in 0ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513969835,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:39:30 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:30 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513972309,"pid":3184,"hostname":"QASIM","uploadError":"Error: Connection Closed","count":5,"msg":"Failed to upload pre-keys to server"}
+4:39:33 PM [express] GET /api/status 304 in 1ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+{"level":50,"time":1769513976358,"pid":3184,"hostname":"QASIM","reasonNode":{"tag":"conflict","attrs":{"type":"replaced"}},"fullErrorNode":{"tag":"stream:error","attrs":{},"content":[{"tag":"conflict","attrs":{"type":"replaced"}}]},"msg":"stream errored out"}
+Reconnecting in 5000ms...
+4:39:36 PM [express] GET /api/status 304 in 0ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:39 PM [express] GET /api/status 304 in 0ms :: {"connected":false,"connecting":false,"lastError":"Stream Errored (conflict)"}
+4:39:39 PM [express] GET /api/contacts 304 in 749ms :: []
