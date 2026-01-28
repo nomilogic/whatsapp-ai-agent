@@ -25,16 +25,36 @@ export default function ContactSettingsModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Fetch settings when modal opens - force fresh fetch each time
+  // Fetch settings when modal opens or contactId changes - force fresh fetch each time
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
+    
+    console.log("Modal opening for contactId:", contactId, "isOpen:", isOpen);
     
     const fetchSettings = async () => {
       setLoading(true);
+      // Reset state while loading
+      setIsBlocked(false);
+      setIsTrainer(false);
+      setSpecialInstructions("");
+      
       try {
-        const res = await fetch(`/api/admin-bot/contact/${contactId}/settings`);
+        // Add cache-buster with timestamp to ensure fresh data
+        const cacheBreaker = `_t=${Date.now()}`;
+        const url = `/api/admin-bot/contact/${contactId}/settings?${cacheBreaker}`;
+        console.log("Fetching from:", url);
+        
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          }
+        });
         const data = await res.json();
-        console.log("Fetched contact settings:", data); // Debug log
+        console.log("Fetched contact settings for contactId", contactId, ":", data);
         setIsBlocked(data.isBlocked || false);
         setIsTrainer(data.isTrainer || false);
         setSpecialInstructions(data.specialInstructions || "");

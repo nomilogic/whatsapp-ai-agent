@@ -52,9 +52,13 @@ export default function Contacts() {
 
   const handleSettingsClick = (e: React.MouseEvent, contact: any) => {
     e.preventDefault();
+    // Update state synchronously in order
     setSelectedContactId(contact.id);
     setSelectedContactName(contact.name || contact.pushName || contact.remoteJid);
-    setIsSettingsModalOpen(true);
+    // Open modal in next tick to ensure state is updated
+    setTimeout(() => {
+      setIsSettingsModalOpen(true);
+    }, 0);
   };
 
   const handleSettingsModalClose = async (saved: boolean) => {
