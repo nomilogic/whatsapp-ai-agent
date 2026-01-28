@@ -189,25 +189,31 @@ export async function setupWhatsApp(storage: IStorage) {
             if (adminBotHandler) {
               // Use Admin Bot Handler for personalized response
               
-              // 1. Adapt personality based on new message
-              await adminBotHandler.analyzeAndAdaptPersonality(
-                contact.id,
-                history,
-                textContent
-              );
+              // Only run AI-based features if API keys are available
+              const hasOpenAI = process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim();
+              const hasGemini = process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim();
+              
+              if (hasOpenAI || hasGemini) {
+                // 1. Adapt personality based on new message
+                await adminBotHandler.analyzeAndAdaptPersonality(
+                  contact.id,
+                  history,
+                  textContent
+                );
 
-              // 2. Extract tasks and follow-ups from conversation
-              const { tasks, followUps } = await adminBotHandler.extractTasksAndFollowUps(
-                contact.id,
-                history
-              );
+                // 2. Extract tasks and follow-ups from conversation
+                const { tasks, followUps } = await adminBotHandler.extractTasksAndFollowUps(
+                  contact.id,
+                  history
+                );
 
-              if (tasks.length > 0) {
-                console.log(`Extracted ${tasks.length} tasks for contact ${contact.name}`);
-              }
+                if (tasks.length > 0) {
+                  console.log(`Extracted ${tasks.length} tasks for contact ${contact.name}`);
+                }
 
-              if (followUps.length > 0) {
-                console.log(`Extracted ${followUps.length} follow-ups for contact ${contact.name}`);
+                if (followUps.length > 0) {
+                  console.log(`Extracted ${followUps.length} follow-ups for contact ${contact.name}`);
+                }
               }
 
               // 3. Generate personalized response based on contact personality
@@ -218,11 +224,13 @@ export async function setupWhatsApp(storage: IStorage) {
                 identity
               );
 
-              // 4. Update conversation summary
-              await adminBotHandler.generateConversationSummary(
-                contact.id,
-                history
-              );
+              if (hasOpenAI || hasGemini) {
+                // 4. Update conversation summary
+                await adminBotHandler.generateConversationSummary(
+                  contact.id,
+                  history
+                );
+              }
             } else {
               // Fallback to standard response generation
               const systemPromptSetting = await storage.getSetting('system_prompt');

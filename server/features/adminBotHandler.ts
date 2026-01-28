@@ -412,11 +412,20 @@ Return a JSON with these optional updates:
       let adaptationText = "";
 
       if (this.gemini) {
-        const result = await this.gemini.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: adaptPrompt }] }],
-        });
-        adaptationText = result.text || "";
+        try {
+          const result = await this.gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts: [{ text: adaptPrompt }] }],
+          });
+          adaptationText = result.text || "";
+        } catch (geminiError) {
+          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
+          const completion = await this.openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: adaptPrompt }],
+          });
+          adaptationText = completion.choices[0]?.message?.content || "";
+        }
       } else {
         const completion = await this.openai.chat.completions.create({
           model: "gpt-4o",
@@ -506,11 +515,20 @@ Return as JSON:
       let extractionText = "";
 
       if (this.gemini) {
-        const result = await this.gemini.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: extractionPrompt }] }],
-        });
-        extractionText = result.text || "";
+        try {
+          const result = await this.gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts: [{ text: extractionPrompt }] }],
+          });
+          extractionText = result.text || "";
+        } catch (geminiError) {
+          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
+          const completion = await this.openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: extractionPrompt }],
+          });
+          extractionText = completion.choices[0]?.message?.content || "";
+        }
       } else {
         const completion = await this.openai.chat.completions.create({
           model: "gpt-4o",
@@ -619,11 +637,20 @@ Return as JSON:
       let summaryText = "";
 
       if (this.gemini) {
-        const result = await this.gemini.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: summaryPrompt }] }],
-        });
-        summaryText = result.text || "";
+        try {
+          const result = await this.gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts: [{ text: summaryPrompt }] }],
+          });
+          summaryText = result.text || "";
+        } catch (geminiError) {
+          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
+          const completion = await this.openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: summaryPrompt }],
+          });
+          summaryText = completion.choices[0]?.message?.content || "";
+        }
       } else {
         const completion = await this.openai.chat.completions.create({
           model: "gpt-4o",
@@ -694,18 +721,51 @@ Return as JSON:
     );
 
     try {
+      // Check if API keys are available
+      const hasOpenAI = process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim();
+      const hasGemini = process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim();
+      
+      if (!hasOpenAI && !hasGemini) {
+        console.warn(`No API keys configured for AI responses. Configure AI_INTEGRATIONS_OPENAI_API_KEY or AI_INTEGRATIONS_GEMINI_API_KEY`);
+        return "I appreciate your message, but I'm not able to respond right now due to missing API configuration. Please check back later.";
+      }
+
       if (this.gemini) {
-        const chatMessages = messages.map((h) => ({
-          role: h.role === "user" ? ("user" as const) : ("model" as const),
-          parts: [{ text: h.content }],
-        }));
+        try {
+          const chatMessages = messages.map((h) => ({
+            role: h.role === "user" ? ("user" as const) : ("model" as const),
+            parts: [{ text: h.content }],
+          }));
 
-        const result = await this.gemini.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: chatMessages,
-        });
+          const result = await this.gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: chatMessages,
+          });
 
-        return result.text || "I couldn't process that.";
+          return result.text || "I couldn't process that.";
+        } catch (geminiError) {
+          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
+          if (!hasOpenAI) {
+            console.error("OpenAI API key not configured, cannot fallback");
+            return "I'm having trouble with my AI service right now. Please try again later.";
+          }
+          const chatMessages = messages.map((h) => ({
+            role: h.role as "user" | "assistant" | "system",
+            content: h.content,
+          }));
+
+          chatMessages.unshift({
+            role: "system" as const,
+            content: systemPrompt,
+          });
+
+          const completion = await this.openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: chatMessages as any,
+          });
+
+          return completion.choices[0]?.message?.content || "I couldn't process that.";
+        }
       } else {
         const chatMessages = messages.map((h) => ({
           role: h.role as "user" | "assistant" | "system",
