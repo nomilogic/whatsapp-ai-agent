@@ -16,6 +16,86 @@ export function initializeAdminBotRoutes(handler: AdminBotHandler) {
   adminBotHandler = handler;
 }
 
+// ==================== TRAINER CONTACTS ENDPOINTS ====================
+
+/**
+ * GET /api/admin-bot/trainers
+ * List trainer contacts
+ */
+adminBotRouter.get("/trainers", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const trainers = await adminBotHandler.listTrainerContacts();
+    res.json({ trainers });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin-bot/trainers
+ * Add a new trainer contact
+ */
+adminBotRouter.post("/trainers", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const { trainerContactId, displayName, targets } = req.body;
+    if (!trainerContactId) return res.status(400).json({ error: "trainerContactId required" });
+    const profile = await adminBotHandler.addTrainerContact(Number(trainerContactId), displayName, Array.isArray(targets) ? targets.map(Number) : undefined);
+    res.status(201).json(profile);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin-bot/trainers/:trainerId
+ * Get a trainer profile
+ */
+adminBotRouter.get("/trainers/:trainerId", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const trainerId = Number(req.params.trainerId);
+    const profile = await adminBotHandler.getTrainerProfile(trainerId);
+    if (!profile) return res.status(404).json({ error: "Trainer not found" });
+    res.json(profile);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin-bot/trainers/:trainerId
+ * Remove a trainer contact
+ */
+adminBotRouter.delete("/trainers/:trainerId", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const trainerId = Number(req.params.trainerId);
+    await adminBotHandler.removeTrainerContact(trainerId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin-bot/trainers/:trainerId/instruct
+ * Record an instruction coming from a trainer (optionally target a specific contact)
+ */
+adminBotRouter.post("/trainers/:trainerId/instruct", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const trainerId = Number(req.params.trainerId);
+    const { instruction, targetContactId } = req.body;
+    if (!instruction) return res.status(400).json({ error: "instruction is required" });
+    const recorded = await adminBotHandler.recordTrainerInstruction(trainerId, String(instruction), targetContactId ? Number(targetContactId) : undefined);
+    res.status(201).json(recorded);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== PERSONALITY ENDPOINTS ====================
 
 /**

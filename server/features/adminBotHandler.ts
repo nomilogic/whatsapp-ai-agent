@@ -71,6 +71,29 @@ export interface ContactInformationSummary {
 }
 
 /**
+ * Trainer profile - a contact authorized to train the global model behavior
+ */
+export interface TrainerProfile {
+  trainerContactId: number;
+  displayName?: string;
+  // targets: list of contactIds this trainer provides instructions for; empty = global
+  targets?: number[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Raw trainer instruction recorded from a trainer conversation
+ */
+export interface TrainerInstruction {
+  id: string;
+  trainerContactId: number;
+  targetContactId?: number; // undefined => global
+  instruction: string;
+  createdAt: Date;
+}
+
+/**
  * Admin Bot Handler - Manages personalized bot behavior per contact
  */
 export class AdminBotHandler {
@@ -81,6 +104,10 @@ export class AdminBotHandler {
   private contactTasks: Map<number, ContactTask[]> = new Map();
   private contactFollowUps: Map<number, FollowUpItem[]> = new Map();
   private contactSummaries: Map<number, ContactInformationSummary> = new Map();
+  // Trainer contacts and instructions
+  private trainerProfiles: Map<number, TrainerProfile> = new Map();
+  // Map targetContactId (or 0 for global) -> TrainerInstruction[]
+  private trainerInstructions: Map<number, TrainerInstruction[]> = new Map();
 
   constructor(
     storage: IStorage,
@@ -92,6 +119,130 @@ export class AdminBotHandler {
     if (geminiApiKey) {
       this.gemini = new GoogleGenAI({ apiKey: geminiApiKey });
     }
+  }
+
+  /**
+   * Add a trainer contact (who can train the model). Optional targets specify which contacts
+   * the trainer's instructions apply to; empty targets means global instructions.
+   */
+  async addTrainerContact(
+    trainerContactId: number,
+    displayName?: string,
+    targets?: number[]
+  ): Promise<TrainerProfile> {
+    const now = new Date();
+    const profile: TrainerProfile = {
+      trainerContactId,
+      displayName,
+      targets: targets || [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.trainerProfiles.set(trainerContactId, profile);
+    await this.storage.updateSetting(
+      `admin_bot_trainer_${trainerContactId}`,
+      JSON.stringify(profile)
+    );
+
+    return profile;
+  }
+
+  async removeTrainerContact(trainerContactId: number): Promise<boolean> {
+    this.trainerProfiles.delete(trainerContactId);
+    await this.storage.updateSetting(`admin_bot_trainer_${trainerContactId}`, "");
+    return true;
+  }
+
+  async listTrainerContacts(): Promise<TrainerProfile[]> {
+    // Try to load from storage if map empty
+    if (this.trainerProfiles.size === 0) {
+      // naive scan: attempt to load a setting prefix - storage may not support listing, so skip
+    }
+    return Array.from(this.trainerProfiles.values());
+  }
+
+  async getTrainerProfile(trainerContactId: number): Promise<TrainerProfile | null> {
+    if (this.trainerProfiles.has(trainerContactId)) return this.trainerProfiles.get(trainerContactId)!;
+    const setting = await this.storage.getSetting(`admin_bot_trainer_${trainerContactId}`);
+    if (setting?.value) {
+      try {
+        const p = JSON.parse(setting.value) as TrainerProfile;
+        this.trainerProfiles.set(trainerContactId, p);
+        return p;
+      } catch (e) {
+        console.error(`Error parsing trainer profile ${trainerContactId}:`, e);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Record a trainer instruction (trainer converses and instructs the model).
+   * If targetContactId is undefined, it's a global instruction.
+   */
+  async recordTrainerInstruction(
+    trainerContactId: number,
+    instruction: string,
+    targetContactId?: number
+  ): Promise<TrainerInstruction> {
+    const now = new Date();
+    const id = `instr_${trainerContactId}_${now.getTime()}`;
+    const ti: TrainerInstruction = {
+      id,
+      trainerContactId,
+      targetContactId,
+      instruction,
+      createdAt: now,
+    };
+
+    const key = targetContactId ?? 0;
+    const arr = this.trainerInstructions.get(key) || [];
+    arr.push(ti);
+    this.trainerInstructions.set(key, arr);
+
+    // persist a simple list per target
+    try {
+      const existing = (await this.storage.getSetting(`admin_bot_trainer_instructions_${key}`))?.value;
+      const list = existing ? JSON.parse(existing) : [];
+      list.push(ti);
+      await this.storage.updateSetting(`admin_bot_trainer_instructions_${key}`, JSON.stringify(list));
+    } catch (e) {
+      console.warn("Could not persist trainer instruction:", e);
+    }
+
+    return ti;
+  }
+
+  /**
+   * Return combined trainer instructions relevant for a target contact.
+   * Includes global (key=0) then specific target instructions.
+   */
+  async getInstructionsForTarget(targetContactId: number): Promise<string[]> {
+    const global = this.trainerInstructions.get(0) || [];
+    const target = this.trainerInstructions.get(targetContactId) || [];
+    // try to load from storage if missing
+    if (global.length === 0) {
+      const s = await this.storage.getSetting(`admin_bot_trainer_instructions_0`);
+      if (s?.value) {
+        try {
+          const parsed = JSON.parse(s.value) as TrainerInstruction[];
+          this.trainerInstructions.set(0, parsed);
+        } catch (e) {}
+      }
+    }
+    if (target.length === 0) {
+      const s = await this.storage.getSetting(`admin_bot_trainer_instructions_${targetContactId}`);
+      if (s?.value) {
+        try {
+          const parsed = JSON.parse(s.value) as TrainerInstruction[];
+          this.trainerInstructions.set(targetContactId, parsed);
+        } catch (e) {}
+      }
+    }
+
+    const combined = [ ...(this.trainerInstructions.get(0) || []), ...(this.trainerInstructions.get(targetContactId) || []) ];
+    return combined.map((c) => `${c.trainerContactId}:${c.instruction}`);
   }
 
   /**
@@ -456,10 +607,11 @@ Return as JSON:
     const personality = await this.getContactPersonality(contactId);
     const contact = await this.storage.getContact(contactId);
 
-    const systemPrompt = this.buildPersonalizedSystemPrompt(
+    const systemPrompt = await this.buildPersonalizedSystemPrompt(
       personality,
       contact,
-      identity
+      identity,
+      contactId
     );
 
     try {
@@ -663,11 +815,21 @@ Return as JSON:
   /**
    * Build personalized system prompt for a contact
    */
-  private buildPersonalizedSystemPrompt(
+  private async buildPersonalizedSystemPrompt(
     personality: ContactPersonality,
     contact: any,
-    identity: any
-  ): string {
+    identity: any,
+    contactId?: number
+  ): Promise<string> {
+    // incorporate trainer instructions (global + specific)
+    let trainerInstructionsText = "";
+    if (typeof contactId === "number") {
+      const instrs = await this.getInstructionsForTarget(contactId);
+      if (instrs.length > 0) {
+        trainerInstructionsText = `\nTRAINER INSTRUCTIONS:\n- ${instrs.join('\n- ')}\n`;
+      }
+    }
+
     let prompt = `You are representing ${identity?.name || "a person"} in this conversation with ${contact?.name || "a contact"}.
 
 PERSONALITY PROFILE:
@@ -697,6 +859,11 @@ IMPORTANT RULES:
 4. Show genuine interest in their life and thoughts
 5. Keep responses consistent with the personality style above
 6. Use emoji sparingly if set to minimal, moderately if balanced, frequently if heavy`;
+
+    // Append trainer instructions if present
+    if (trainerInstructionsText) {
+      prompt += `\n\n${trainerInstructionsText}`;
+    }
 
     return prompt;
   }

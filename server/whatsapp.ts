@@ -136,6 +136,35 @@ export async function setupWhatsApp(storage: IStorage) {
             status: 'read'
           });
 
+          // If this contact is a registered trainer, record the instruction and acknowledge
+          if (adminBotHandler) {
+            try {
+              const trainerProfile = await adminBotHandler.getTrainerProfile(contact.id);
+              if (trainerProfile) {
+                // Try to detect an explicit numeric target via @<digits>
+                const mentionMatch = textContent.match(/@(\d{3,})/);
+                const targetContactId = mentionMatch ? Number(mentionMatch[1]) : undefined;
+
+                await adminBotHandler.recordTrainerInstruction(contact.id, textContent, targetContactId);
+
+                const ack = `Instruction recorded${targetContactId ? ` for contact ${targetContactId}` : ' (global)'}.`;
+                await sock?.sendMessage(remoteJid, { text: ack });
+
+                await storage.createMessage({
+                  contactId: contact.id,
+                  role: 'assistant',
+                  content: ack,
+                  status: 'sent'
+                });
+
+                // For trainer messages we stop further auto-reply processing (they're training messages)
+                continue;
+              }
+            } catch (trainerErr) {
+              console.error('Error processing trainer message:', trainerErr);
+            }
+          }
+
           // 3. Check Auto-Reply
           const autoReplySetting = await storage.getSetting('auto_reply');
           if (autoReplySetting?.value === 'true') {
