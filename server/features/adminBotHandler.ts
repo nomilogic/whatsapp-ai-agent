@@ -676,10 +676,10 @@ Return as JSON:
 
   /**
    * Generate personalized response based on contact personality and history
+   * Note: messages array should already include the latest user message
    */
   async generatePersonalizedResponse(
     contactId: number,
-    messageContent: string,
     messages: Array<{ role: string; content: string }>,
     identity: any
   ): Promise<string> {
@@ -700,12 +700,6 @@ Return as JSON:
           parts: [{ text: h.content }],
         }));
 
-        // Add current message
-        chatMessages.push({
-          role: "user" as const,
-          parts: [{ text: messageContent }],
-        });
-
         const result = await this.gemini.models.generateContent({
           model: "gemini-2.5-flash",
           contents: chatMessages,
@@ -717,11 +711,6 @@ Return as JSON:
           role: h.role as "user" | "assistant" | "system",
           content: h.content,
         }));
-
-        chatMessages.push({
-          role: "user" as const,
-          content: messageContent,
-        });
 
         chatMessages.unshift({
           role: "system" as const,

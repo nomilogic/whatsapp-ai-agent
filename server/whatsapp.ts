@@ -136,16 +136,20 @@ export async function setupWhatsApp(storage: IStorage) {
             status: 'read'
           });
 
-          // If this contact is a registered trainer, record the instruction and acknowledge
+          // If this contact is a registered trainer and message starts with @INSTRUCT, record the instruction
+          let isTrainerInstruction = false;
           if (adminBotHandler) {
             try {
               const trainerProfile = await adminBotHandler.getTrainerProfile(contact.id);
-              if (trainerProfile) {
+              if (trainerProfile && textContent.trim().startsWith('@INSTRUCT')) {
+                // Extract instruction (remove @INSTRUCT prefix)
+                const instruction = textContent.replace(/^@INSTRUCT\s*/, '').trim();
+                
                 // Try to detect an explicit numeric target via @<digits>
-                const mentionMatch = textContent.match(/@(\d{3,})/);
+                const mentionMatch = instruction.match(/@(\d{3,})/);
                 const targetContactId = mentionMatch ? Number(mentionMatch[1]) : undefined;
 
-                await adminBotHandler.recordTrainerInstruction(contact.id, textContent, targetContactId);
+                await adminBotHandler.recordTrainerInstruction(contact.id, instruction, targetContactId);
 
                 const ack = `Instruction recorded${targetContactId ? ` for contact ${targetContactId}` : ' (global)'}.`;
                 await sock?.sendMessage(remoteJid, { text: ack });
@@ -157,12 +161,17 @@ export async function setupWhatsApp(storage: IStorage) {
                   status: 'sent'
                 });
 
-                // For trainer messages we stop further auto-reply processing (they're training messages)
-                continue;
+                // For explicit trainer instructions we stop further auto-reply processing
+                isTrainerInstruction = true;
               }
             } catch (trainerErr) {
-              console.error('Error processing trainer message:', trainerErr);
+              console.error('Error processing trainer instruction:', trainerErr);
             }
+          }
+
+          // Skip auto-reply only if this was an explicit trainer instruction
+          if (isTrainerInstruction) {
+            continue;
           }
 
           // 3. Check Auto-Reply
@@ -202,9 +211,9 @@ export async function setupWhatsApp(storage: IStorage) {
               }
 
               // 3. Generate personalized response based on contact personality
+              // Note: history already includes the latest user message
               replyContent = await adminBotHandler.generatePersonalizedResponse(
                 contact.id,
-                textContent,
                 history,
                 identity
               );
