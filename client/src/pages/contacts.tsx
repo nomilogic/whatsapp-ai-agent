@@ -1,25 +1,75 @@
 import { useContacts } from "@/hooks/use-whatsapp";
-import { Search, MessageSquare, User, Users } from "lucide-react";
+import { Search, MessageSquare, User, Users, Settings, Ban } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import ContactSettingsModal from "@/components/ContactSettingsModal";
+
+interface ContactWithSettings {
+  id: number;
+  name?: string;
+  pushName?: string;
+  remoteJid: string;
+  type: string;
+  lastMessageAt?: string;
+  isBlocked?: boolean;
+}
 
 export default function Contacts() {
   const { data: contacts, isLoading } = useContacts();
   const [search, setSearch] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+  const [selectedContactName, setSelectedContactName] = useState("");
+  const [contactBlockStatus, setContactBlockStatus] = useState<Record<number, boolean>>({});
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const filteredContacts = contacts?.filter(contact => 
-    contact.name?.toLowerCase().includes(search.toLowerCase()) || 
-    contact.pushName?.toLowerCase().includes(search.toLowerCase()) ||
-    contact.remoteJid.includes(search)
-  ).sort((a, b) => {
-    // Sort by last message time (descending)
-    const timeA = new Date(a.lastMessageAt || 0).getTime();
-    const timeB = new Date(b.lastMessageAt || 0).getTime();
-    return timeB - timeA;
-  });
+  // Fetch block status for all contacts on load
+  const contactsWithStatus = (contacts || []).map((contact) => ({
+    ...contact,
+    isBlocked: contactBlockStatus[contact.id] || false,
+  }));
+
+  const filteredContacts = contactsWithStatus
+    ?.filter(
+      (contact) =>
+        contact.name?.toLowerCase().includes(search.toLowerCase()) ||
+        contact.pushName?.toLowerCase().includes(search.toLowerCase()) ||
+        contact.remoteJid.includes(search)
+    )
+    .sort((a, b) => {
+      // Sort by last message time (descending)
+      const timeA = new Date(a.lastMessageAt || 0).getTime();
+      const timeB = new Date(b.lastMessageAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+  const handleSettingsClick = (e: React.MouseEvent, contact: any) => {
+    e.preventDefault();
+    setSelectedContactId(contact.id);
+    setSelectedContactName(contact.name || contact.pushName || contact.remoteJid);
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleToggleBlock = async (e: React.MouseEvent, contactId: number) => {
+    e.preventDefault();
+    const isCurrentlyBlocked = contactBlockStatus[contactId];
+    try {
+      await fetch(`/api/admin-bot/contact/${contactId}/block`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocked: !isCurrentlyBlocked }),
+      });
+      setContactBlockStatus((prev) => ({
+        ...prev,
+        [contactId]: !isCurrentlyBlocked,
+      }));
+    } catch (e) {
+      console.error("Failed to toggle block:", e);
+    }
+  };
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -67,8 +117,8 @@ export default function Contacts() {
           <div className="grid grid-cols-1 gap-3">
             {filteredContacts?.map((contact) => (
               <Link key={contact.id} href={`/contacts/${contact.id}`}>
-                <Card className="group hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer border border-border/60">
-                  <div className="p-4 flex items-center gap-4">
+                <Card className={`group hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer border border-border/60 ${contact.isBlocked ? "opacity-60 bg-muted/20" : ""}`}>
+                  <div className="p-4 flex items-center gap-4 relative">
                     {/* Avatar Placeholder */}
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center text-primary font-bold shadow-inner">
                       {contact.type === 'group' ? <Users className="w-5 h-5" /> : <User className="w-5 h-5" />}
@@ -76,9 +126,16 @@ export default function Contacts() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center mb-1">
-                        <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                          {contact.name || contact.pushName || contact.remoteJid.split('@')[0]}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                            {contact.name || contact.pushName || contact.remoteJid.split('@')[0]}
+                          </h3>
+                          {contact.isBlocked && (
+                            <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full">
+                              Blocked
+                            </span>
+                          )}
+                        </div>
                         {contact.lastMessageAt && (
                           <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
                             {format(new Date(contact.lastMessageAt), 'MMM d, h:mm a')}
@@ -92,6 +149,28 @@ export default function Contacts() {
                         <MessageSquare className="w-4 h-4 text-muted-foreground/30 group-hover:text-primary/50 transition-colors ml-2" />
                       </div>
                     </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 hover:bg-muted"
+                        onClick={(e) => handleToggleBlock(e, contact.id)}
+                        title={contact.isBlocked ? "Unblock contact" : "Block contact"}
+                      >
+                        <Ban className={`w-4 h-4 ${contact.isBlocked ? "text-destructive" : "text-muted-foreground"}`} />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 hover:bg-muted"
+                        onClick={(e) => handleSettingsClick(e, contact)}
+                        title="Contact settings"
+                      >
+                        <Settings className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               </Link>
@@ -99,6 +178,16 @@ export default function Contacts() {
           </div>
         )}
       </div>
+
+      {/* Contact Settings Modal */}
+      {selectedContactId !== null && (
+        <ContactSettingsModal
+          contactId={selectedContactId}
+          contactName={selectedContactName}
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

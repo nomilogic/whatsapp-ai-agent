@@ -246,6 +246,54 @@ export class AdminBotHandler {
   }
 
   /**
+   * Block a contact (bot will not respond to messages from this contact)
+   */
+  async blockContact(contactId: number): Promise<void> {
+    await this.storage.updateSetting(`admin_bot_blocked_${contactId}`, "true");
+  }
+
+  /**
+   * Unblock a contact
+   */
+  async unblockContact(contactId: number): Promise<void> {
+    await this.storage.updateSetting(`admin_bot_blocked_${contactId}`, "");
+  }
+
+  /**
+   * Check if a contact is blocked
+   */
+  async isContactBlocked(contactId: number): Promise<boolean> {
+    const setting = await this.storage.getSetting(`admin_bot_blocked_${contactId}`);
+    return setting?.value === "true";
+  }
+
+  /**
+   * Set special instructions for a contact
+   */
+  async setContactSpecialInstructions(contactId: number, instructions: string): Promise<void> {
+    await this.storage.updateSetting(
+      `admin_bot_special_instructions_${contactId}`,
+      instructions ? JSON.stringify({ instructions, updatedAt: new Date() }) : ""
+    );
+  }
+
+  /**
+   * Get special instructions for a contact
+   */
+  async getContactSpecialInstructions(contactId: number): Promise<string | null> {
+    const setting = await this.storage.getSetting(`admin_bot_special_instructions_${contactId}`);
+    if (setting?.value) {
+      try {
+        const parsed = JSON.parse(setting.value);
+        return parsed.instructions;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Get or create personality profile for a contact
    */
   async getContactPersonality(contactId: number): Promise<ContactPersonality> {

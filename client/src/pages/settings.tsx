@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { Button as LinkButton } from "@/components/ui/button";
 
 const GEMINI_MODELS = [
   "gemini-3.0-pro-preview",
@@ -82,6 +83,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        <div>
+          <LinkButton onClick={() => (window.location.href = '/admin-bot')}>Open Admin Bot UI</LinkButton>
+        </div>
         {/* General Controls */}
         <motion.div 
           initial={{ opacity: 0, y: 10 }}

@@ -16,6 +16,60 @@ export function initializeAdminBotRoutes(handler: AdminBotHandler) {
   adminBotHandler = handler;
 }
 
+// ==================== CONTACT SETTINGS ENDPOINTS ====================
+
+/**
+ * GET /api/admin-bot/contact/:contactId/settings
+ * Get contact block status and special instructions
+ */
+adminBotRouter.get("/contact/:contactId/settings", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const contactId = Number(req.params.contactId);
+    const isBlocked = await adminBotHandler.isContactBlocked(contactId);
+    const specialInstructions = await adminBotHandler.getContactSpecialInstructions(contactId);
+    res.json({ isBlocked, specialInstructions });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/admin-bot/contact/:contactId/block
+ * Block or unblock a contact
+ */
+adminBotRouter.patch("/contact/:contactId/block", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const contactId = Number(req.params.contactId);
+    const { blocked } = req.body;
+    if (blocked) {
+      await adminBotHandler.blockContact(contactId);
+    } else {
+      await adminBotHandler.unblockContact(contactId);
+    }
+    res.json({ success: true, blocked });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/admin-bot/contact/:contactId/special-instructions
+ * Set special instructions for a contact
+ */
+adminBotRouter.patch("/contact/:contactId/special-instructions", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const contactId = Number(req.params.contactId);
+    const { instructions } = req.body;
+    await adminBotHandler.setContactSpecialInstructions(contactId, instructions || "");
+    res.json({ success: true, instructions });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== TRAINER CONTACTS ENDPOINTS ====================
 
 /**

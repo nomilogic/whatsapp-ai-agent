@@ -1,7 +1,7 @@
 import { useMessages, useSendMessage, useContact } from "@/hooks/use-whatsapp";
 import { useRoute } from "wouter";
 import { useState, useRef, useEffect } from "react";
-import { Send, ArrowLeft, Bot, User, Loader2, MoreVertical } from "lucide-react";
+import { Send, ArrowLeft, Bot, User, Loader2, MoreVertical, Settings } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import ContactSettingsModal from "@/components/ContactSettingsModal";
 
 export default function ChatView() {
   const [, params] = useRoute("/contacts/:id");
@@ -19,6 +20,7 @@ export default function ChatView() {
   const { mutate: sendMessage, isPending: isSending } = useSendMessage();
 
   const [inputText, setInputText] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom on new messages
@@ -63,10 +65,24 @@ export default function ChatView() {
           </p>
         </div>
 
-        <Button variant="ghost" size="icon">
-          <MoreVertical className="w-5 h-5 text-muted-foreground" />
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          <Settings className="w-5 h-5 text-muted-foreground" />
         </Button>
       </div>
+
+      {/* Contact Settings Modal */}
+      {contact && (
+        <ContactSettingsModal
+          contactId={contactId}
+          contactName={contact.name || contact.pushName || contact.remoteJid}
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50">
