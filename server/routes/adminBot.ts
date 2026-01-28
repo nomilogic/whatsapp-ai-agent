@@ -20,7 +20,7 @@ export function initializeAdminBotRoutes(handler: AdminBotHandler) {
 
 /**
  * GET /api/admin-bot/contact/:contactId/settings
- * Get contact block status and special instructions
+ * Get contact block status, special instructions, and trainer status
  */
 adminBotRouter.get("/contact/:contactId/settings", async (req: Request, res: Response) => {
   try {
@@ -28,7 +28,8 @@ adminBotRouter.get("/contact/:contactId/settings", async (req: Request, res: Res
     const contactId = Number(req.params.contactId);
     const isBlocked = await adminBotHandler.isContactBlocked(contactId);
     const specialInstructions = await adminBotHandler.getContactSpecialInstructions(contactId);
-    res.json({ isBlocked, specialInstructions });
+    const isTrainer = await adminBotHandler.isContactTrainer(contactId);
+    res.json({ isBlocked, specialInstructions, isTrainer });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -81,6 +82,26 @@ adminBotRouter.get("/trainers", async (req: Request, res: Response) => {
     if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
     const trainers = await adminBotHandler.listTrainerContacts();
     res.json({ trainers });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/admin-bot/contact/:contactId/toggle-trainer
+ * Toggle trainer status for a contact
+ */
+adminBotRouter.patch("/contact/:contactId/toggle-trainer", async (req: Request, res: Response) => {
+  try {
+    if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
+    const contactId = Number(req.params.contactId);
+    const { isTrainer } = req.body;
+    if (isTrainer) {
+      await adminBotHandler.addTrainerContact(contactId);
+    } else {
+      await adminBotHandler.removeTrainerContact(contactId);
+    }
+    res.json({ success: true, isTrainer });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

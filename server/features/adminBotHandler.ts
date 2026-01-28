@@ -294,6 +294,13 @@ export class AdminBotHandler {
   }
 
   /**
+   * Check if a contact is a trainer
+   */
+  async isContactTrainer(contactId: number): Promise<boolean> {
+    return this.trainerProfiles.has(contactId) || (await this.getTrainerProfile(contactId)) !== null;
+  }
+
+  /**
    * Get or create personality profile for a contact
    */
   async getContactPersonality(contactId: number): Promise<ContactPersonality> {

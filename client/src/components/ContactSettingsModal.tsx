@@ -20,6 +20,7 @@ export default function ContactSettingsModal({
   onClose,
 }: ContactSettingsModalProps) {
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isTrainer, setIsTrainer] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,6 +33,7 @@ export default function ContactSettingsModal({
       .then((res) => res.json())
       .then((data) => {
         setIsBlocked(data.isBlocked || false);
+        setIsTrainer(data.isTrainer || false);
         setSpecialInstructions(data.specialInstructions || "");
       })
       .catch((e) => console.error("Failed to fetch settings:", e))
@@ -46,6 +48,13 @@ export default function ContactSettingsModal({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blocked: isBlocked }),
+      });
+
+      // Save trainer status
+      await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isTrainer }),
       });
 
       // Save special instructions
@@ -87,6 +96,20 @@ export default function ContactSettingsModal({
               <Switch
                 checked={isBlocked}
                 onCheckedChange={setIsBlocked}
+              />
+            </div>
+
+            {/* Trainer Toggle */}
+            <div className="flex items-center justify-between space-x-4">
+              <div className="flex-1">
+                <Label className="text-base font-semibold">Mark as Trainer</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This contact can provide training instructions for the bot
+                </p>
+              </div>
+              <Switch
+                checked={isTrainer}
+                onCheckedChange={setIsTrainer}
               />
             </div>
 

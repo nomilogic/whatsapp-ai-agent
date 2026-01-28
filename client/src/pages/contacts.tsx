@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import ContactSettingsModal from "@/components/ContactSettingsModal";
 
 interface ContactWithSettings {
@@ -16,6 +17,7 @@ interface ContactWithSettings {
   type: string;
   lastMessageAt?: string;
   isBlocked?: boolean;
+  isTrainer?: boolean;
 }
 
 export default function Contacts() {
@@ -24,12 +26,14 @@ export default function Contacts() {
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [selectedContactName, setSelectedContactName] = useState("");
   const [contactBlockStatus, setContactBlockStatus] = useState<Record<number, boolean>>({});
+  const [contactTrainerStatus, setContactTrainerStatus] = useState<Record<number, boolean>>({});
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // Fetch block status for all contacts on load
   const contactsWithStatus = (contacts || []).map((contact) => ({
     ...contact,
     isBlocked: contactBlockStatus[contact.id] || false,
+    isTrainer: contactTrainerStatus[contact.id] || false,
   }));
 
   const filteredContacts = contactsWithStatus
@@ -68,6 +72,24 @@ export default function Contacts() {
       }));
     } catch (e) {
       console.error("Failed to toggle block:", e);
+    }
+  };
+
+  const handleToggleTrainer = async (e: React.MouseEvent, contactId: number) => {
+    e.preventDefault();
+    const isCurrentlyTrainer = contactTrainerStatus[contactId];
+    try {
+      await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isTrainer: !isCurrentlyTrainer }),
+      });
+      setContactTrainerStatus((prev) => ({
+        ...prev,
+        [contactId]: !isCurrentlyTrainer,
+      }));
+    } catch (e) {
+      console.error("Failed to toggle trainer:", e);
     }
   };
 
@@ -161,6 +183,18 @@ export default function Contacts() {
                       >
                         <Ban className={`w-4 h-4 ${contact.isBlocked ? "text-destructive" : "text-muted-foreground"}`} />
                       </Button>
+                      <div 
+                        className="flex items-center h-8 px-2 hover:bg-muted rounded cursor-pointer"
+                        onClick={(e) => handleToggleTrainer(e, contact.id)}
+                        title={contact.isTrainer ? "Remove as trainer" : "Mark as trainer"}
+                      >
+                        <Checkbox 
+                          checked={contact.isTrainer || false}
+                          onCheckedChange={() => {}}
+                          className="cursor-pointer"
+                        />
+                        <span className="text-xs ml-1 text-muted-foreground font-medium">Trainer</span>
+                      </div>
                       <Button
                         size="icon"
                         variant="ghost"
