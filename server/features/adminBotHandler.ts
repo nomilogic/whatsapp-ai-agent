@@ -797,9 +797,18 @@ Return as JSON:
             parts: [{ text: h.content }],
           }));
 
+          // Add system prompt to Gemini messages as first user message
+          const messagesWithSystem = [
+            {
+              role: "user" as const,
+              parts: [{ text: systemPrompt }],
+            },
+            ...chatMessages,
+          ];
+
           const result = await this.gemini.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: chatMessages,
+            contents: messagesWithSystem,
           });
 
           return result.text || "I couldn't process that.";
