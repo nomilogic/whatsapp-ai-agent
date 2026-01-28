@@ -297,7 +297,21 @@ export class AdminBotHandler {
    * Check if a contact is a trainer
    */
   async isContactTrainer(contactId: number): Promise<boolean> {
-    return this.trainerProfiles.has(contactId) || (await this.getTrainerProfile(contactId)) !== null;
+    // Check in-memory cache first
+    if (this.trainerProfiles.has(contactId)) {
+      return true;
+    }
+    // Check storage (source of truth)
+    const setting = await this.storage.getSetting(`admin_bot_trainer_${contactId}`);
+    if (setting?.value) {
+      try {
+        JSON.parse(setting.value);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
   }
 
   /**

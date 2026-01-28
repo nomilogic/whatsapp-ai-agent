@@ -25,19 +25,27 @@ export default function ContactSettingsModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Fetch settings when modal opens
+  // Fetch settings when modal opens - force fresh fetch each time
   useEffect(() => {
     if (!isOpen) return;
-    setLoading(true);
-    fetch(`/api/admin-bot/contact/${contactId}/settings`)
-      .then((res) => res.json())
-      .then((data) => {
+    
+    const fetchSettings = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/admin-bot/contact/${contactId}/settings`);
+        const data = await res.json();
+        console.log("Fetched contact settings:", data); // Debug log
         setIsBlocked(data.isBlocked || false);
         setIsTrainer(data.isTrainer || false);
         setSpecialInstructions(data.specialInstructions || "");
-      })
-      .catch((e) => console.error("Failed to fetch settings:", e))
-      .finally(() => setLoading(false));
+      } catch (e) {
+        console.error("Failed to fetch settings:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchSettings();
   }, [contactId, isOpen]);
 
   const handleSave = async () => {
