@@ -112,6 +112,14 @@ export class AdminBotHandler {
   private lastTaskExtractionTime: Map<number, number> = new Map();
   // Only extract tasks once every 5 minutes (300000ms) per contact
   private readonly TASK_EXTRACTION_INTERVAL = 5 * 60 * 1000;
+  // Personality analysis debounce: contactId -> last analysis timestamp
+  private lastPersonalityAnalysisTime: Map<number, number> = new Map();
+  // Only analyze personality once every 10 minutes per contact
+  private readonly PERSONALITY_ANALYSIS_INTERVAL = 10 * 60 * 1000;
+  // Conversation summary debounce: contactId -> last summary timestamp
+  private lastConversationSummaryTime: Map<number, number> = new Map();
+  // Only generate summary once every 15 minutes per contact
+  private readonly CONVERSATION_SUMMARY_INTERVAL = 15 * 60 * 1000;
 
   constructor(
     storage: IStorage,
@@ -373,6 +381,19 @@ export class AdminBotHandler {
     messages: Array<{ role: string; content: string }>,
     messageContent: string
   ): Promise<ContactPersonality> {
+    // Check if enough time has passed since last analysis
+    const now = Date.now();
+    const lastAnalysis = this.lastPersonalityAnalysisTime.get(contactId) || 0;
+    const timeSinceLastAnalysis = now - lastAnalysis;
+
+    // Return cached personality if analyzed recently
+    if (timeSinceLastAnalysis < this.PERSONALITY_ANALYSIS_INTERVAL) {
+      return (
+        this.contactPersonalities.get(contactId) ||
+        (await this.getContactPersonality(contactId))
+      );
+    }
+
     const currentPersonality = await this.getContactPersonality(contactId);
     const allText = messages.map((m) => m.content).join(" ");
 
@@ -453,6 +474,7 @@ Return a JSON with these optional updates:
         );
 
         this.contactPersonalities.set(contactId, updatedPersonality);
+        this.lastPersonalityAnalysisTime.set(contactId, now);
         return updatedPersonality;
       }
     } catch (error) {
@@ -621,6 +643,26 @@ Return as JSON:
     contactId: number,
     messages: Array<{ role: string; content: string }>
   ): Promise<ContactInformationSummary> {
+    // Check if enough time has passed since last summary
+    const now = Date.now();
+    const lastSummary = this.lastConversationSummaryTime.get(contactId) || 0;
+    const timeSinceLastSummary = now - lastSummary;
+
+    // Return cached summary if generated recently
+    if (timeSinceLastSummary < this.CONVERSATION_SUMMARY_INTERVAL) {
+      return (
+        this.contactSummaries.get(contactId) ||
+        {
+          contactId,
+          summary: "Conversation summary pending",
+          keyTopics: [],
+          recentInteractions: [],
+          relationshipStatus: "Unknown",
+          lastUpdated: new Date(),
+        }
+      );
+    }
+
     const personality = await this.getContactPersonality(contactId);
     const allText = messages.map((m) => m.content).join(" ");
 
@@ -702,6 +744,7 @@ Return as JSON:
           JSON.stringify(informationSummary)
         );
 
+        this.lastConversationSummaryTime.set(contactId, now);
         return informationSummary;
       }
     } catch (error) {
