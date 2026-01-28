@@ -7,6 +7,8 @@ import { setupWhatsApp } from "./whatsapp";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import enhancedFeaturesRouter from "./routes/enhancedFeatures";
+import adminBotRouter, { initializeAdminBotRoutes } from "./routes/adminBot";
+import { AdminBotHandler } from "./features/adminBotHandler";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -17,8 +19,19 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
 
+  // Initialize Admin Bot Handler
+  const adminBotHandler = new AdminBotHandler(
+    storage,
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY || '',
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY
+  );
+  initializeAdminBotRoutes(adminBotHandler);
+
   // Register Enhanced Features Routes (Memory, Tasks, Analytics, Messaging)
   app.use("/api", enhancedFeaturesRouter);
+
+  // Register Admin Bot Routes (Personality, Tasks, Follow-ups, Summaries)
+  app.use("/api/admin-bot", adminBotRouter);
 
   // Initialize WhatsApp Service
   const whatsAppService = await setupWhatsApp(storage);

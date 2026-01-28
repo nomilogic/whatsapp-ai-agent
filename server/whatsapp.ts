@@ -11,6 +11,7 @@ import { type IStorage } from './storage';
 import OpenAI from 'openai';
 import { GoogleGenAI } from "@google/genai";
 import QRCode from 'qrcode';
+import { AdminBotHandler } from './features/adminBotHandler';
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -26,6 +27,9 @@ if (process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
   });
 }
 
+// Initialize Admin Bot Handler
+let adminBotHandler: AdminBotHandler | null = null;
+
 let sock: WASocket | null = null;
 let qrCode: string | null = null;
 let qrCodeDataUrl: string | null = null;
@@ -37,6 +41,13 @@ export async function setupWhatsApp(storage: IStorage) {
   const { version, isLatest } = await fetchLatestBaileysVersion();
   
   console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
+
+  // Initialize Admin Bot Handler
+  adminBotHandler = new AdminBotHandler(
+    storage,
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY || '',
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY
+  );
 
   async function startSock() {
     connectionStatus = 'connecting';
@@ -58,11 +69,11 @@ export async function setupWhatsApp(storage: IStorage) {
         qrCode = qr;
         // Convert QR code to data URL for display
         QRCode.toDataURL(qr)
-          .then(url => {
+          .then((url: string) => {
             qrCodeDataUrl = url;
             console.log('✓ QR Code generated - scan to authenticate');
           })
-          .catch(err => console.error('Failed to generate QR data URL:', err));
+          .catch((err: any) => console.error('Failed to generate QR data URL:', err));
       }
 
       if (connection === 'close') {
@@ -134,79 +145,110 @@ export async function setupWhatsApp(storage: IStorage) {
             
             // Get Identity and Context for Personalized Response
             const identity = await storage.getIdentity();
-            const systemPromptSetting = await storage.getSetting('system_prompt');
-            
-            let systemContent = systemPromptSetting?.value || "You are a helpful assistant.";
-            
-            // Important: Do not reveal that you are an AI or digital assistant
-            systemContent += `\n\nIMPORTANT: Never tell the user that you are an AI, a digital assistant, a bot, or any kind of artificial intelligence. Never acknowledge limitations due to being AI. Respond as a natural person would. If asked what you are, deflect or respond as a real person.`;
-            
-            if (identity) {
-              systemContent += `\nYour name is ${identity.name}.`;
-              systemContent += `\nPersonality: ${JSON.stringify(identity.personalityTraits)}`;
-              if (identity.values?.length) systemContent += `\nValues: ${identity.values.join(', ')}`;
-              if (identity.interests?.length) systemContent += `\nInterests: ${identity.interests.join(', ')}`;
-            }
-
-            // Relationship Context
-            if (contact.relationshipType) {
-              systemContent += `\nRelationship with this contact: ${contact.relationshipType} (Level: ${contact.relationshipLevel})`;
-            }
-
-            // Get AI Response
-            const providerSetting = await storage.getSetting('ai_provider');
-            const provider = providerSetting?.value || 'gemini';
             
             let replyContent = "";
 
-            if (provider === 'gemini' && gemini) {
-              const geminiModelSetting = await storage.getSetting('gemini_model');
-              const model = geminiModelSetting?.value || 'gemini-2.5-flash';
+            if (adminBotHandler) {
+              // Use Admin Bot Handler for personalized response
               
-              try {
-                const chatMessages = history.map(h => ({
-                  role: h.role === 'user' ? 'user' : 'model',
-                  parts: [{ text: h.content }]
-                }));
-                
-                // Prepend system instruction as a user message
-                chatMessages.unshift({
-                  role: 'user',
-                  parts: [{ text: `SYSTEM INSTRUCTION: ${systemContent}` }]
-                });
+              // 1. Adapt personality based on new message
+              await adminBotHandler.analyzeAndAdaptPersonality(
+                contact.id,
+                history,
+                textContent
+              );
 
-                const result = await gemini.models.generateContent({
-                  model: model,
-                  contents: chatMessages as any,
-                   systemInstruction: systemContent,
-                  config: {
-      tools: [{ googleSearch: {} }] // This line enables web grounding
-    },
-                });
-                
-                const responseText = result.text;
-                replyContent = responseText || "I'm sorry, I couldn't process that.";
-              } catch (geminiError) {
-                console.error('Gemini API error:', geminiError);
-                replyContent = `Error from Gemini API: ${(geminiError as Error)?.message || 'Unknown error'}`;
+              // 2. Extract tasks and follow-ups from conversation
+              const { tasks, followUps } = await adminBotHandler.extractTasksAndFollowUps(
+                contact.id,
+                history
+              );
+
+              if (tasks.length > 0) {
+                console.log(`Extracted ${tasks.length} tasks for contact ${contact.name}`);
               }
-            } else if (provider === 'gemini' && !gemini) {
-              replyContent = "Gemini is not configured. Please set up the Gemini API key.";
+
+              if (followUps.length > 0) {
+                console.log(`Extracted ${followUps.length} follow-ups for contact ${contact.name}`);
+              }
+
+              // 3. Generate personalized response based on contact personality
+              replyContent = await adminBotHandler.generatePersonalizedResponse(
+                contact.id,
+                textContent,
+                history,
+                identity
+              );
+
+              // 4. Update conversation summary
+              await adminBotHandler.generateConversationSummary(
+                contact.id,
+                history
+              );
             } else {
-              const messages = history.map(h => ({
-                role: h.role as 'user' | 'assistant' | 'system',
-                content: h.content
-              }));
-              messages.unshift({ role: 'system', content: systemContent });
+              // Fallback to standard response generation
+              const systemPromptSetting = await storage.getSetting('system_prompt');
+              let systemContent = systemPromptSetting?.value || "You are a helpful assistant.";
+              
+              systemContent += `\n\nIMPORTANT: Never tell the user that you are an AI, a digital assistant, a bot, or any kind of artificial intelligence. Never acknowledge limitations due to being AI. Respond as a natural person would. If asked what you are, deflect or respond as a real person.`;
+              
+              if (identity) {
+                systemContent += `\nYour name is ${identity.name}.`;
+                systemContent += `\nPersonality: ${JSON.stringify(identity.personalityTraits)}`;
+                if (identity.values?.length) systemContent += `\nValues: ${identity.values.join(', ')}`;
+                if (identity.interests?.length) systemContent += `\nInterests: ${identity.interests.join(', ')}`;
+              }
 
-              const modelSetting = await storage.getSetting('openai_model');
-              const model = modelSetting?.value || 'gpt-4o';
+              if (contact.relationshipType) {
+                systemContent += `\nRelationship with this contact: ${contact.relationshipType} (Level: ${contact.relationshipLevel})`;
+              }
 
-              const completion = await openai.chat.completions.create({
-                messages: messages as any,
-                model: model,
-              });
-              replyContent = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that.";
+              const providerSetting = await storage.getSetting('ai_provider');
+              const provider = providerSetting?.value || 'gemini';
+              
+              if (provider === 'gemini' && gemini) {
+                const geminiModelSetting = await storage.getSetting('gemini_model');
+                const model = geminiModelSetting?.value || 'gemini-2.5-flash';
+                
+                try {
+                  const chatMessages = history.map(h => ({
+                    role: h.role === 'user' ? 'user' : 'model',
+                    parts: [{ text: h.content }]
+                  }));
+                  
+                  chatMessages.unshift({
+                    role: 'user',
+                    parts: [{ text: `SYSTEM INSTRUCTION: ${systemContent}` }]
+                  });
+
+                  const result = await gemini.models.generateContent({
+                    model: model,
+                    contents: chatMessages as any,
+                  });
+                  
+                  replyContent = result.text || "I'm sorry, I couldn't process that.";
+                } catch (geminiError) {
+                  console.error('Gemini API error:', geminiError);
+                  replyContent = `Error from Gemini API: ${(geminiError as Error)?.message || 'Unknown error'}`;
+                }
+              } else if (provider === 'gemini' && !gemini) {
+                replyContent = "Gemini is not configured. Please set up the Gemini API key.";
+              } else {
+                const messages = history.map(h => ({
+                  role: h.role as 'user' | 'assistant' | 'system',
+                  content: h.content
+                }));
+                messages.unshift({ role: 'system', content: systemContent });
+
+                const modelSetting = await storage.getSetting('openai_model');
+                const model = modelSetting?.value || 'gpt-4o';
+
+                const completion = await openai.chat.completions.create({
+                  messages: messages as any,
+                  model: model,
+                });
+                replyContent = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that.";
+              }
             }
 
             // 4. Send Reply
