@@ -71,38 +71,60 @@ export default function ContactSettingsModal({
   const handleSave = async () => {
     setSaving(true);
     try {
+      console.log(`[MODAL] Saving settings for contact ${contactId}:`, { isBlocked, isTrainer, specialInstructions });
+      
       // Save block status
-      await fetch(`/api/admin-bot/contact/${contactId}/block`, {
+      console.log(`[MODAL] PATCH /api/admin-bot/contact/${contactId}/block with blocked=${isBlocked}`);
+      const blockRes = await fetch(`/api/admin-bot/contact/${contactId}/block`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blocked: isBlocked }),
       });
+      const blockData = await blockRes.json();
+      console.log(`[MODAL] Block response:`, blockData);
+      if (!blockRes.ok) throw new Error(`Block save failed: ${blockRes.status}`);
 
       // Save trainer status
-      await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
+      console.log(`[MODAL] PATCH /api/admin-bot/contact/${contactId}/toggle-trainer with isTrainer=${isTrainer}`);
+      const trainerRes = await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isTrainer }),
       });
+      const trainerData = await trainerRes.json();
+      console.log(`[MODAL] Trainer response:`, trainerData);
+      if (!trainerRes.ok) throw new Error(`Trainer save failed: ${trainerRes.status}`);
 
       // Save special instructions
-      await fetch(`/api/admin-bot/contact/${contactId}/special-instructions`, {
+      console.log(`[MODAL] PATCH /api/admin-bot/contact/${contactId}/special-instructions`);
+      const instructionsRes = await fetch(`/api/admin-bot/contact/${contactId}/special-instructions`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instructions: specialInstructions }),
       });
+      const instructionsData = await instructionsRes.json();
+      console.log(`[MODAL] Instructions response:`, instructionsData);
+      if (!instructionsRes.ok) throw new Error(`Instructions save failed: ${instructionsRes.status}`);
 
+      console.log(`[MODAL] ✓ All settings saved successfully for contact ${contactId}`);
       onClose(true);
     } catch (e) {
-      console.error("Failed to save settings:", e);
+      console.error(`[MODAL] ✗ Failed to save settings for contact ${contactId}:`, e);
       onClose(false);
     } finally {
       setSaving(false);
     }
   };
 
+  const handleDialogOpenChange = (open: boolean) => {
+    // If dialog is being closed (open=false), close without saving
+    if (!open) {
+      onClose(false);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Settings for {contactName}</DialogTitle>

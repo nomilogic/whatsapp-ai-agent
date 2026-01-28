@@ -1,6 +1,6 @@
 import { useContacts } from "@/hooks/use-whatsapp";
 import { Search, MessageSquare, User, Users, Settings, Ban } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
@@ -28,6 +28,33 @@ export default function Contacts() {
   const [contactBlockStatus, setContactBlockStatus] = useState<Record<number, boolean>>({});
   const [contactTrainerStatus, setContactTrainerStatus] = useState<Record<number, boolean>>({});
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+  // Load trainer and block status for all contacts when contacts load
+  useEffect(() => {
+    if (!contacts || contacts.length === 0) return;
+
+    const loadContactSettings = async () => {
+      const blockStatuses: Record<number, boolean> = {};
+      const trainerStatuses: Record<number, boolean> = {};
+
+      for (const contact of contacts) {
+        try {
+          const res = await fetch(`/api/admin-bot/contact/${contact.id}/settings?_t=${Date.now()}`);
+          const data = await res.json();
+          blockStatuses[contact.id] = data.isBlocked || false;
+          trainerStatuses[contact.id] = data.isTrainer || false;
+          console.log(`Loaded settings for contact ${contact.id}:`, { isBlocked: blockStatuses[contact.id], isTrainer: trainerStatuses[contact.id] });
+        } catch (e) {
+          console.error(`Failed to load settings for contact ${contact.id}:`, e);
+        }
+      }
+
+      setContactBlockStatus(blockStatuses);
+      setContactTrainerStatus(trainerStatuses);
+    };
+
+    loadContactSettings();
+  }, [contacts]);
 
   // Fetch block status for all contacts on load
   const contactsWithStatus = (contacts || []).map((contact) => ({
@@ -66,8 +93,21 @@ export default function Contacts() {
     // Refetch settings for this contact to sync the UI
     if (saved && selectedContactId !== null) {
       try {
-        const res = await fetch(`/api/admin-bot/contact/${selectedContactId}/settings`);
+        // Small delay to ensure server has persisted all changes
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Add cache-buster to ensure fresh data
+        const url = `/api/admin-bot/contact/${selectedContactId}/settings?_t=${Date.now()}`;
+        console.log("Refetching settings after modal close:", url);
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          }
+        });
         const data = await res.json();
+        console.log("Refetched settings for contact", selectedContactId, ":", data);
         setContactBlockStatus((prev) => ({
           ...prev,
           [selectedContactId]: data.isBlocked || false,
@@ -85,36 +125,42 @@ export default function Contacts() {
   const handleToggleBlock = async (e: React.MouseEvent, contactId: number) => {
     e.preventDefault();
     const isCurrentlyBlocked = contactBlockStatus[contactId];
+    console.log(`Toggling block for contact ${contactId}, currently: ${isCurrentlyBlocked}`);
     try {
-      await fetch(`/api/admin-bot/contact/${contactId}/block`, {
+      const res = await fetch(`/api/admin-bot/contact/${contactId}/block`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blocked: !isCurrentlyBlocked }),
       });
+      const data = await res.json();
+      console.log(`Block response for ${contactId}:`, data);
       setContactBlockStatus((prev) => ({
         ...prev,
         [contactId]: !isCurrentlyBlocked,
       }));
     } catch (e) {
-      console.error("Failed to toggle block:", e);
+      console.error(`Failed to toggle block for contact ${contactId}:`, e);
     }
   };
 
   const handleToggleTrainer = async (e: React.MouseEvent, contactId: number) => {
     e.preventDefault();
     const isCurrentlyTrainer = contactTrainerStatus[contactId];
+    console.log(`Toggling trainer for contact ${contactId}, currently: ${isCurrentlyTrainer}`);
     try {
-      await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
+      const res = await fetch(`/api/admin-bot/contact/${contactId}/toggle-trainer`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isTrainer: !isCurrentlyTrainer }),
       });
+      const data = await res.json();
+      console.log(`Trainer toggle response for ${contactId}:`, data);
       setContactTrainerStatus((prev) => ({
         ...prev,
         [contactId]: !isCurrentlyTrainer,
       }));
     } catch (e) {
-      console.error("Failed to toggle trainer:", e);
+      console.error(`Failed to toggle trainer for contact ${contactId}:`, e);
     }
   };
 

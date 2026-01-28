@@ -26,11 +26,14 @@ adminBotRouter.get("/contact/:contactId/settings", async (req: Request, res: Res
   try {
     if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
     const contactId = Number(req.params.contactId);
+    console.log(`[API] GET /api/admin-bot/contact/${contactId}/settings`);
     const isBlocked = await adminBotHandler.isContactBlocked(contactId);
     const specialInstructions = await adminBotHandler.getContactSpecialInstructions(contactId);
     const isTrainer = await adminBotHandler.isContactTrainer(contactId);
+    console.log(`[API] Response:`, { isBlocked, isTrainer, specialInstructions: specialInstructions ? "[exists]" : "[empty]" });
     res.json({ isBlocked, specialInstructions, isTrainer });
   } catch (error: any) {
+    console.error(`[API] Error in GET settings:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -44,13 +47,16 @@ adminBotRouter.patch("/contact/:contactId/block", async (req: Request, res: Resp
     if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
     const contactId = Number(req.params.contactId);
     const { blocked } = req.body;
+    console.log(`[API] PATCH /api/admin-bot/contact/${contactId}/block with blocked=${blocked}`);
     if (blocked) {
       await adminBotHandler.blockContact(contactId);
     } else {
       await adminBotHandler.unblockContact(contactId);
     }
+    console.log(`[API] Block endpoint response: success=true, blocked=${blocked}`);
     res.json({ success: true, blocked });
   } catch (error: any) {
+    console.error(`[API] Error in PATCH block:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -96,13 +102,16 @@ adminBotRouter.patch("/contact/:contactId/toggle-trainer", async (req: Request, 
     if (!adminBotHandler) return res.status(500).json({ error: "Admin Bot Handler not initialized" });
     const contactId = Number(req.params.contactId);
     const { isTrainer } = req.body;
+    console.log(`[API] PATCH /api/admin-bot/contact/${contactId}/toggle-trainer with isTrainer=${isTrainer}`);
     if (isTrainer) {
       await adminBotHandler.addTrainerContact(contactId);
     } else {
       await adminBotHandler.removeTrainerContact(contactId);
     }
+    console.log(`[API] Trainer endpoint response: success=true, isTrainer=${isTrainer}`);
     res.json({ success: true, isTrainer });
   } catch (error: any) {
+    console.error(`[API] Error in PATCH toggle-trainer:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });

@@ -249,14 +249,18 @@ export class AdminBotHandler {
    * Block a contact (bot will not respond to messages from this contact)
    */
   async blockContact(contactId: number): Promise<void> {
+    console.log(`[ADMIN_BOT] blockContact called for ${contactId}`);
     await this.storage.updateSetting(`admin_bot_blocked_${contactId}`, "true");
+    console.log(`[ADMIN_BOT] blockContact saved for ${contactId}`);
   }
 
   /**
    * Unblock a contact
    */
   async unblockContact(contactId: number): Promise<void> {
+    console.log(`[ADMIN_BOT] unblockContact called for ${contactId}`);
     await this.storage.updateSetting(`admin_bot_blocked_${contactId}`, "");
+    console.log(`[ADMIN_BOT] unblockContact saved for ${contactId}`);
   }
 
   /**
@@ -264,7 +268,9 @@ export class AdminBotHandler {
    */
   async isContactBlocked(contactId: number): Promise<boolean> {
     const setting = await this.storage.getSetting(`admin_bot_blocked_${contactId}`);
-    return setting?.value === "true";
+    const isBlocked = setting?.value === "true";
+    console.log(`[ADMIN_BOT] isContactBlocked(${contactId}): ${isBlocked}`);
+    return isBlocked;
   }
 
   /**
@@ -299,6 +305,7 @@ export class AdminBotHandler {
   async isContactTrainer(contactId: number): Promise<boolean> {
     // Check in-memory cache first
     if (this.trainerProfiles.has(contactId)) {
+      console.log(`[ADMIN_BOT] isContactTrainer(${contactId}): true (from cache)`);
       return true;
     }
     // Check storage (source of truth)
@@ -306,11 +313,14 @@ export class AdminBotHandler {
     if (setting?.value) {
       try {
         JSON.parse(setting.value);
+        console.log(`[ADMIN_BOT] isContactTrainer(${contactId}): true (from storage)`);
         return true;
       } catch (e) {
+        console.log(`[ADMIN_BOT] isContactTrainer(${contactId}): false (storage parse failed)`);
         return false;
       }
     }
+    console.log(`[ADMIN_BOT] isContactTrainer(${contactId}): false (not found)`);
     return false;
   }
 
