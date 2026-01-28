@@ -10,7 +10,7 @@ interface ContactSettingsModalProps {
   contactId: number;
   contactName: string;
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (saved: boolean) => void;
 }
 
 export default function ContactSettingsModal({
@@ -64,9 +64,10 @@ export default function ContactSettingsModal({
         body: JSON.stringify({ instructions: specialInstructions }),
       });
 
-      onClose();
+      onClose(true);
     } catch (e) {
       console.error("Failed to save settings:", e);
+      onClose(false);
     } finally {
       setSaving(false);
     }
@@ -133,7 +134,7 @@ export default function ContactSettingsModal({
         )}
 
         <DialogFooter className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+          <Button variant="outline" onClick={() => onClose(false)} disabled={saving}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={loading || saving}>

@@ -57,6 +57,27 @@ export default function Contacts() {
     setIsSettingsModalOpen(true);
   };
 
+  const handleSettingsModalClose = async (saved: boolean) => {
+    setIsSettingsModalOpen(false);
+    // Refetch settings for this contact to sync the UI
+    if (saved && selectedContactId !== null) {
+      try {
+        const res = await fetch(`/api/admin-bot/contact/${selectedContactId}/settings`);
+        const data = await res.json();
+        setContactBlockStatus((prev) => ({
+          ...prev,
+          [selectedContactId]: data.isBlocked || false,
+        }));
+        setContactTrainerStatus((prev) => ({
+          ...prev,
+          [selectedContactId]: data.isTrainer || false,
+        }));
+      } catch (e) {
+        console.error("Failed to refetch settings:", e);
+      }
+    }
+  };
+
   const handleToggleBlock = async (e: React.MouseEvent, contactId: number) => {
     e.preventDefault();
     const isCurrentlyBlocked = contactBlockStatus[contactId];
@@ -219,7 +240,7 @@ export default function Contacts() {
           contactId={selectedContactId}
           contactName={selectedContactName}
           isOpen={isSettingsModalOpen}
-          onClose={() => setIsSettingsModalOpen(false)}
+          onClose={(saved) => handleSettingsModalClose(saved)}
         />
       )}
     </div>
