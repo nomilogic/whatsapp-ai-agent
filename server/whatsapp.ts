@@ -178,8 +178,9 @@ export async function setupWhatsApp(storage: IStorage) {
           const autoReplySetting = await storage.getSetting('auto_reply');
           if (autoReplySetting?.value === 'true') {
             
-            // Get History
-            const history = await storage.getMessages(contact.id);
+            // Get History (last 50 messages, then reverse to chronological order)
+            const recentMessages = await storage.getMessages(contact.id, 50);
+            const history = recentMessages.reverse();
             
             // Get Identity and Context for Personalized Response
             const identity = await storage.getIdentity();
@@ -194,43 +195,51 @@ export async function setupWhatsApp(storage: IStorage) {
               const hasGemini = process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim();
               
               if (hasOpenAI || hasGemini) {
-                // 1. Adapt personality based on new message
-                await adminBotHandler.analyzeAndAdaptPersonality(
-                  contact.id,
-                  history,
-                  textContent
-                );
-
-                // 2. Extract tasks and follow-ups from conversation
-                const { tasks, followUps } = await adminBotHandler.extractTasksAndFollowUps(
-                  contact.id,
-                  history
-                );
-
-                if (tasks.length > 0) {
-                  console.log(`Extracted ${tasks.length} tasks for contact ${contact.name}`);
-                }
-
-                if (followUps.length > 0) {
-                  console.log(`Extracted ${followUps.length} follow-ups for contact ${contact.name}`);
-                }
+                // Run personality analysis and task extraction in PARALLEL (don't block each other)
+                Promise.all([
+                  adminBotHandler.analyzeAndAdaptPersonality(
+                    contact.id,
+                    history,
+                    textContent
+                  ).catch(err => {
+                    console.error('Personality analysis error:', err.message);
+                  }),
+                  
+                  adminBotHandler.extractTasksAndFollowUps(
+                    contact.id,
+                    history
+                  ).then(({ tasks, followUps }) => {
+                    if (tasks.length > 0) {
+                      console.log(`Extracted ${tasks.length} tasks for contact ${contact.name}`);
+                    }
+                    if (followUps.length > 0) {
+                      console.log(`Extracted ${followUps.length} follow-ups for contact ${contact.name}`);
+                    }
+                    return { tasks, followUps };
+                  }).catch(err => {
+                    console.error('Task extraction error:', err.message);
+                  }),
+                  
+                  // Also run summary generation in background (don't await it)
+                  adminBotHandler.generateConversationSummary(
+                    contact.id,
+                    history
+                  ).catch(err => {
+                    console.error('Summary generation error:', err.message);
+                  })
+                ]).catch(err => {
+                  console.error('Parallel operations error:', err.message);
+                });
+                // Don't await these - let them run in background
               }
 
-              // 3. Generate personalized response based on contact personality
+              // 3. Generate personalized response based on contact personality (ONLY ONE THAT MATTERS FOR SPEED)
               // Note: history already includes the latest user message
               replyContent = await adminBotHandler.generatePersonalizedResponse(
                 contact.id,
                 history,
                 identity
               );
-
-              if (hasOpenAI || hasGemini) {
-                // 4. Update conversation summary
-                await adminBotHandler.generateConversationSummary(
-                  contact.id,
-                  history
-                );
-              }
             } else {
               // Fallback to standard response generation
               const systemPromptSetting = await storage.getSetting('system_prompt');
