@@ -108,6 +108,10 @@ export class AdminBotHandler {
   private trainerProfiles: Map<number, TrainerProfile> = new Map();
   // Map targetContactId (or 0 for global) -> TrainerInstruction[]
   private trainerInstructions: Map<number, TrainerInstruction[]> = new Map();
+  // Task extraction debounce: contactId -> last extraction timestamp
+  private lastTaskExtractionTime: Map<number, number> = new Map();
+  // Only extract tasks once every 5 minutes (300000ms) per contact
+  private readonly TASK_EXTRACTION_INTERVAL = 5 * 60 * 1000;
 
   constructor(
     storage: IStorage,
@@ -460,6 +464,7 @@ Return a JSON with these optional updates:
 
   /**
    * Extract and track tasks/follow-ups from conversation
+   * OPTIMIZED: Debounced to run only once per 5 minutes per contact to avoid excessive API calls
    */
   async extractTasksAndFollowUps(
     contactId: number,
@@ -468,6 +473,22 @@ Return a JSON with these optional updates:
     tasks: ContactTask[];
     followUps: FollowUpItem[];
   }> {
+    // Check if enough time has passed since last extraction
+    const now = Date.now();
+    const lastExtraction = this.lastTaskExtractionTime.get(contactId) || 0;
+    const timeSinceLastExtraction = now - lastExtraction;
+
+    // Return cached tasks/follow-ups if extracted recently
+    if (timeSinceLastExtraction < this.TASK_EXTRACTION_INTERVAL) {
+      const cachedTasks = this.contactTasks.get(contactId) || [];
+      const cachedFollowUps = this.contactFollowUps.get(contactId) || [];
+      return {
+        tasks: cachedTasks,
+        followUps: cachedFollowUps,
+      };
+    }
+
+    // Only proceed with extraction if enough time has passed
     const allText = messages.map((m) => m.content).join(" ");
 
     const extractionPrompt = `Analyze this conversation and extract any tasks or follow-up items that the bot should remember and act upon.
@@ -540,11 +561,11 @@ Return as JSON:
       const jsonMatch = extractionText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const extracted = JSON.parse(jsonMatch[0]);
-        const now = new Date();
+        const extractedNow = new Date();
 
         const tasks: ContactTask[] = (extracted.tasks || []).map(
           (task: any, idx: number) => ({
-            id: `task_${contactId}_${now.getTime()}_${idx}`,
+            id: `task_${contactId}_${extractedNow.getTime()}_${idx}`,
             contactId,
             title: task.title,
             description: task.description,
@@ -553,48 +574,44 @@ Return as JSON:
             category: task.category,
             dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
             relatedTopics: task.relatedTopics || [],
-            createdAt: now,
-            updatedAt: now,
+            createdAt: extractedNow,
+            updatedAt: extractedNow,
           })
         );
 
         const followUps: FollowUpItem[] = (extracted.followUps || []).map(
           (fu: any, idx: number) => ({
-            id: `followup_${contactId}_${now.getTime()}_${idx}`,
+            id: `followup_${contactId}_${extractedNow.getTime()}_${idx}`,
             contactId,
             subject: fu.subject,
             details: fu.details,
-            lastMentionedAt: now,
+            lastMentionedAt: extractedNow,
             nextFollowUpDate: fu.nextFollowUpDate
               ? new Date(fu.nextFollowUpDate)
               : undefined,
             status: "pending" as const,
             priority: fu.priority,
-            createdAt: now,
-            updatedAt: now,
+            createdAt: extractedNow,
+            updatedAt: extractedNow,
           })
         );
-
-        // Store in memory
-        this.contactTasks.set(
-          contactId,
-          [...(this.contactTasks.get(contactId) || []), ...tasks]
-        );
-        this.contactFollowUps.set(
-          contactId,
-          [...(this.contactFollowUps.get(contactId) || []), ...followUps]
-        );
+        
+        // Update cache and timestamp
+        this.contactTasks.set(contactId, tasks);
+        this.contactFollowUps.set(contactId, followUps);
+        this.lastTaskExtractionTime.set(contactId, now);
 
         return { tasks, followUps };
       }
     } catch (error) {
-      console.error(
-        `Error extracting tasks for contact ${contactId}:`,
-        error
-      );
+      console.error(`Error extracting tasks/follow-ups for contact ${contactId}:`, error);
     }
 
-    return { tasks: [], followUps: [] };
+    // Return empty arrays on error
+    return {
+      tasks: [],
+      followUps: [],
+    };
   }
 
   /**
