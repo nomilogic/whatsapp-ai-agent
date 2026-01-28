@@ -8,7 +8,9 @@
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "cleanup:auth": "tsx script/cleanup-baileys.ts",
+    "cleanup:auth-execute": "tsx script/cleanup-baileys.ts --execute"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
