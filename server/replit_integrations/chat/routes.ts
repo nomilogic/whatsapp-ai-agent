@@ -1,17 +1,6 @@
 import type { Express, Request, Response } from "express";
-import { GoogleGenAI } from "@google/genai";
+import { getAIService } from "../../services/aiService";
 import { chatStorage } from "./storage";
-
-let ai: GoogleGenAI | null = null;
-if (process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-  ai = new GoogleGenAI({
-    apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-    httpOptions: {
-      apiVersion: "",
-      baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-    },
-  });
-}
 
 export function registerChatRoutes(app: Express): void {
   // Get all conversations
@@ -28,7 +17,7 @@ export function registerChatRoutes(app: Express): void {
   // Get single conversation with messages
   app.get("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
@@ -56,7 +45,7 @@ export function registerChatRoutes(app: Express): void {
   // Delete conversation
   app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
       await chatStorage.deleteConversation(id);
       res.status(204).send();
     } catch (error) {
@@ -68,7 +57,7 @@ export function registerChatRoutes(app: Express): void {
   // Send message and get AI response (streaming)
   app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
-      const conversationId = parseInt(req.params.id);
+      const conversationId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
       const { content } = req.body;
 
       // Save user message
@@ -86,27 +75,26 @@ export function registerChatRoutes(app: Express): void {
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      // Stream response from Gemini
-      if (!ai) {
-        res.write(`data: ${JSON.stringify({ content: "Gemini is not configured. Please set up the API key." })}\n\n`);
+      // Get AI response using centralized service
+      const aiService = getAIService();
+      const response = await aiService.generateContent(chatMessages);
+
+      if (response.error) {
+        res.write(`data: ${JSON.stringify({ content: "Error: " + response.error })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
         return;
       }
       
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        contents: chatMessages as any,
-      });
+      const fullResponse = response.content;
 
-      let fullResponse = "";
-
-      for await (const chunk of stream) {
-        const content = chunk.text || "";
-        if (content) {
-          fullResponse += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
-        }
+      // Stream response in chunks (simulated, since AIService doesn't stream)
+      const chunkSize = 50;
+      for (let i = 0; i < fullResponse.length; i += chunkSize) {
+        const chunk = fullResponse.substring(i, i + chunkSize);
+        res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+        // Small delay to simulate streaming
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
 
       // Save assistant message

@@ -98,6 +98,93 @@ export function useSettings() {
   });
 }
 
+// --- Devices ---
+export function useDevices() {
+  return useQuery({
+    queryKey: ["/api/devices"],
+    queryFn: async () => {
+      const res = await fetch("/api/devices");
+      if (!res.ok) throw new Error("Failed to fetch devices");
+      return await res.json();
+    },
+    refetchInterval: 5000,
+  });
+}
+
+export function useUpdateDeviceAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deviceId, agentConfig }: { deviceId: number; agentConfig: any }) => {
+      const res = await fetch(`/api/devices/${deviceId}/agent`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentConfig }),
+      });
+      if (!res.ok) throw new Error("Failed to update agent config");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/devices"] });
+    },
+  });
+}
+
+export function useToggleDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deviceId, isActive }: { deviceId: number; isActive: boolean }) => {
+      const res = await fetch(`/api/devices/${deviceId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+      if (!res.ok) throw new Error("Failed to toggle device");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/devices"] }),
+  });
+}
+
+export function useReconnectDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deviceId }: { deviceId: number }) => {
+      const res = await fetch(`/api/devices/${deviceId}/reconnect`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to reconnect device");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/devices"] }),
+  });
+}
+
+export function useCreateDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deviceName, metadata }: { deviceName: string; metadata?: any }) => {
+      const res = await fetch(`/api/devices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName, metadata }),
+      });
+      if (!res.ok) throw new Error("Failed to create device");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/devices"] }),
+  });
+}
+
+export function useDeleteDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deviceId }: { deviceId: number }) => {
+      const res = await fetch(`/api/devices/${deviceId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete device");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/devices"] }),
+  });
+}
+
 export function useUpdateSetting() {
   const queryClient = useQueryClient();
   return useMutation({

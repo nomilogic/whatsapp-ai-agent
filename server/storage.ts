@@ -11,7 +11,7 @@ export interface IStorage {
   updateContact(id: number, contact: Partial<InsertContact>): Promise<Contact>;
 
   // Messages
-  getMessages(contactId: number): Promise<Message[]>;
+  getMessages(contactId: number, limit?: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
 
   // Settings
@@ -58,11 +58,12 @@ export class DatabaseStorage implements IStorage {
     return contact;
   }
 
-  async getMessages(contactId: number): Promise<Message[]> {
+  async getMessages(contactId: number, limit: number = 50): Promise<Message[]> {
     return await db.select()
       .from(messages)
       .where(eq(messages.contactId, contactId))
-      .orderBy(messages.timestamp);
+      .orderBy(desc(messages.timestamp))
+      .limit(limit);
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {

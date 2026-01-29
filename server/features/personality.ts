@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { getAIService } from "../services/aiService";
 import { IStorage } from "../storage";
 
 export interface PersonalityTraits {
@@ -13,16 +13,14 @@ export interface PersonalityTraits {
 }
 
 /**
- * Personality training system using Gemini AI
+ * Personality training system using AI
  * Analyzes user patterns and creates adaptive personality profiles
  */
 export class PersonalityTrainer {
-  private gemini: GoogleGenAI;
   private storage: IStorage;
 
-  constructor(storage: IStorage, apiKey: string) {
+  constructor(storage: IStorage) {
     this.storage = storage;
-    this.gemini = new GoogleGenAI({ apiKey });
   }
 
   /**
@@ -59,12 +57,17 @@ Provide a JSON response with these exact fields:
 }`;
 
     try {
-      const result = await this.gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: analysisPrompt }] }]
-      });
+      const aiService = getAIService();
+      const response = await aiService.generateContent([
+        { role: "user", content: analysisPrompt }
+      ]);
 
-      const analysisText = result.text;
+      if (response.error) {
+        console.error("Error analyzing personality:", response.error);
+        return this.getDefaultPersonality();
+      }
+
+      const analysisText = response.content;
       const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
       
       if (jsonMatch) {

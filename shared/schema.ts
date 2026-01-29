@@ -62,6 +62,21 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const devices = pgTable("devices", {
+  id: serial("id").primaryKey(),
+  deviceName: text("device_name").notNull().unique(), // e.g., 'main', 'secondary', 'business'
+  phoneNumber: text("phone_number"), // WhatsApp phone number
+  isActive: boolean("is_active").default(true), // Enable/disable without deletion
+  connectionStatus: text("connection_status").default("disconnected"), // disconnected|connecting|connected
+  qrCode: text("qr_code"), // Current QR code (base64 PNG data)
+  lastConnected: timestamp("last_connected"),
+  lastError: text("last_error"), // Error messages
+  authPath: text("auth_path").default("auth_info_baileys"), // Path for auth credentials
+  metadata: jsonb("metadata"), // Device-specific metadata
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // === RELATIONS ===
 
 export const contactsRelations = relations(contacts, ({ many }) => ({
@@ -81,6 +96,10 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
     fields: [tasks.contactId],
     references: [contacts.id],
   }),
+}));
+
+export const devicesRelations = relations(devices, ({ many }) => ({
+  contacts: many(contacts), // Contacts connected through this device
 }));
 
 // === BASE SCHEMAS ===
@@ -110,6 +129,12 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
   createdAt: true
 });
 
+export const insertDeviceSchema = createInsertSchema(devices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // === EXPLICIT API CONTRACT TYPES ===
 
 export type Contact = typeof contacts.$inferSelect;
@@ -126,6 +151,9 @@ export type InsertCoreIdentity = z.infer<typeof insertCoreIdentitySchema>;
 
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
+
+export type Device = typeof devices.$inferSelect;
+export type InsertDevice = z.infer<typeof insertDeviceSchema>;
 
 export * from "./models/chat";
 

@@ -82,13 +82,23 @@ export default function Dashboard() {
                   </div>
                 ) : status?.qrCode ? (
                   <div className="space-y-3 text-center">
-                    <QRCodeSVG 
-                      value={status.qrCode} 
-                      size={180}
-                      level="L"
-                      includeMargin={true}
-                      className="rounded-lg shadow-sm"
-                    />
+                    {typeof status.qrCode === 'string' && status.qrCode.startsWith('data:') ? (
+                      <img
+                        src={status.qrCode}
+                        alt="QR Code"
+                        width={180}
+                        height={180}
+                        className="rounded-lg shadow-sm"
+                      />
+                    ) : (
+                      <QRCodeSVG
+                        value={status.qrCode || ''}
+                        size={180}
+                        level="L"
+                        includeMargin={true}
+                        className="rounded-lg shadow-sm"
+                      />
+                    )}
                     <p className="text-xs text-muted-foreground font-medium animate-pulse">
                       Scan to login
                     </p>

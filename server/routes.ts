@@ -9,6 +9,9 @@ import { registerImageRoutes } from "./replit_integrations/image";
 import enhancedFeaturesRouter from "./routes/enhancedFeatures";
 import adminBotRouter, { initializeAdminBotRoutes } from "./routes/adminBot";
 import { AdminBotHandler } from "./features/adminBotHandler";
+import { initializeDeviceManager } from "./services/deviceManager";
+import { registerDeviceRoutes } from "./routes/deviceRoutes";
+import Router from "express";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -18,6 +21,12 @@ export async function registerRoutes(
   // Register Replit AI Integrations
   registerChatRoutes(app);
   registerImageRoutes(app);
+
+  // Initialize Device Manager for multi-device support
+  const deviceManager = initializeDeviceManager(storage);
+  const deviceRouter = Router();
+  registerDeviceRoutes(deviceRouter, storage);
+  app.use(deviceRouter);
 
   // Initialize Admin Bot Handler
   const adminBotHandler = new AdminBotHandler(

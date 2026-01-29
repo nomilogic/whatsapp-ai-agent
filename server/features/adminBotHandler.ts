@@ -1,6 +1,5 @@
 import { IStorage } from "../storage";
-import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
+import { getAIService } from "../services/aiService";
 
 /**
  * Per-Contact Personality Profile for Admin Bot
@@ -98,12 +97,12 @@ export interface TrainerInstruction {
  */
 export class AdminBotHandler {
   private storage: IStorage;
-  private gemini: GoogleGenAI | null = null;
-  private openai: OpenAI;
   private contactPersonalities: Map<number, ContactPersonality> = new Map();
   private contactTasks: Map<number, ContactTask[]> = new Map();
   private contactFollowUps: Map<number, FollowUpItem[]> = new Map();
   private contactSummaries: Map<number, ContactInformationSummary> = new Map();
+  // Per-contact notes (appended from periodic summarization of recent messages)
+  private contactNotes: Map<number, Array<{ id: string; summary: string; details?: string; createdAt: Date }>> = new Map();
   // Trainer contacts and instructions
   private trainerProfiles: Map<number, TrainerProfile> = new Map();
   // Map targetContactId (or 0 for global) -> TrainerInstruction[]
@@ -121,16 +120,8 @@ export class AdminBotHandler {
   // Only generate summary once every 15 minutes per contact
   private readonly CONVERSATION_SUMMARY_INTERVAL = 15 * 60 * 1000;
 
-  constructor(
-    storage: IStorage,
-    openaiApiKey: string,
-    geminiApiKey?: string
-  ) {
+  constructor(storage: IStorage) {
     this.storage = storage;
-    this.openai = new OpenAI({ apiKey: openaiApiKey });
-    if (geminiApiKey) {
-      this.gemini = new GoogleGenAI({ apiKey: geminiApiKey });
-    }
   }
 
   /**
@@ -224,6 +215,189 @@ export class AdminBotHandler {
     }
 
     return ti;
+  }
+
+  /**
+   * Append notes for a contact and persist them.
+   */
+  async appendContactNotes(contactId: number, note: { summary: string; details?: string }): Promise<void> {
+    const now = new Date();
+    const id = `note_${contactId}_${now.getTime()}`;
+    const entry = { id, summary: note.summary, details: note.details || "", createdAt: now };
+
+    const arr = this.contactNotes.get(contactId) || [];
+    arr.push(entry);
+    this.contactNotes.set(contactId, arr);
+
+    try {
+      const existing = (await this.storage.getSetting(`admin_bot_notes_${contactId}`))?.value;
+      const list = existing ? JSON.parse(existing) : [];
+      list.push(entry);
+      await this.storage.updateSetting(`admin_bot_notes_${contactId}`, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not persist contact notes:', e);
+    }
+  }
+
+  /**
+   * Retrieve stored notes for a contact.
+   */
+  async getContactNotes(contactId: number): Promise<Array<{ id: string; summary: string; details?: string; createdAt: Date }>> {
+    if (this.contactNotes.has(contactId)) return this.contactNotes.get(contactId)!;
+    try {
+      const s = await this.storage.getSetting(`admin_bot_notes_${contactId}`);
+      if (s?.value) {
+        const parsed = JSON.parse(s.value) as Array<any>;
+        const mapped = parsed.map(p => ({ id: p.id, summary: p.summary, details: p.details, createdAt: new Date(p.createdAt) }));
+        this.contactNotes.set(contactId, mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.warn('Could not load contact notes from storage:', e);
+    }
+    return [];
+  }
+
+  /**
+   * Append arbitrary raw data provided by trainer under a key.
+   */
+  async appendRawData(key: string, data: any): Promise<void> {
+    try {
+      const settingKey = `admin_bot_raw_${key}`;
+      const existing = (await this.storage.getSetting(settingKey))?.value;
+      const list = existing ? JSON.parse(existing) : [];
+      list.push({ data, createdAt: new Date() });
+      await this.storage.updateSetting(settingKey, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not persist raw data for key', key, e);
+    }
+  }
+
+  /**
+   * Retrieve raw data list by key.
+   */
+  async getRawData(key: string): Promise<any[]> {
+    try {
+      const settingKey = `admin_bot_raw_${key}`;
+      const s = await this.storage.getSetting(settingKey);
+      if (s?.value) return JSON.parse(s.value);
+    } catch (e) {
+      console.warn('Could not load raw data for key', key, e);
+    }
+    return [];
+  }
+
+  /**
+   * Update core identity by merging provided updates into stored identity.
+   */
+  async updateCoreIdentity(updates: Partial<any>): Promise<any> {
+    try {
+      const current = await this.storage.getIdentity();
+      const merged = {
+        name: updates.name ?? current?.name ?? 'You',
+        personalityTraits: updates.personalityTraits ?? current?.personalityTraits ?? {},
+        values: updates.values ?? current?.values ?? [],
+        interests: updates.interests ?? current?.interests ?? [],
+        knowledgeDomains: updates.knowledgeDomains ?? current?.knowledgeDomains ?? [],
+        dailySchedule: updates.dailySchedule ?? current?.dailySchedule ?? {},
+        conversationRules: updates.conversationRules ?? current?.conversationRules ?? {},
+      };
+
+      await this.storage.updateIdentity(merged);
+      return merged;
+    } catch (e) {
+      console.error('Error updating core identity:', e);
+      throw e;
+    }
+  }
+
+  /**
+   * Parse and apply simple trainer identity commands sent as chat text.
+   * Supported patterns:
+   * - @IDENTITY set key=value
+   * - @IDENTITY merge {json}
+   * - @IDENTITY add_interest Topic
+   * - @IDENTITY remove_interest Topic
+   * - @RAW add <key> {json}
+   */
+  async applyTrainerIdentityCommand(trainerContactId: number, commandText: string): Promise<{ success: boolean; message: string }> {
+    const trimmed = commandText.trim();
+    try {
+      // RAW add: @RAW add key {json}
+      const rawMatch = trimmed.match(/^@RAW\s+add\s+(\S+)\s+([\s\S]+)$/i);
+      if (rawMatch) {
+        const key = rawMatch[1];
+        const jsonText = rawMatch[2].trim();
+        let parsed;
+        try { parsed = JSON.parse(jsonText); } catch (_) { parsed = jsonText; }
+        await this.appendRawData(key, parsed);
+        return { success: true, message: `Raw data appended under key ${key}` };
+      }
+
+      // Merge JSON: @IDENTITY merge { ... }
+      const mergeMatch = trimmed.match(/^@IDENTITY\s+merge\s+([\s\S]+)$/i);
+      if (mergeMatch) {
+        const jsonText = mergeMatch[1].trim();
+        const parsed = JSON.parse(jsonText);
+        const updated = await this.updateCoreIdentity(parsed);
+        return { success: true, message: `Identity merged. Current name: ${updated.name}` };
+      }
+
+      // Set key=value: @IDENTITY set key=value
+      const setMatch = trimmed.match(/^@IDENTITY\s+set\s+([^=\s]+)=(.+)$/i);
+      if (setMatch) {
+        const key = setMatch[1].trim();
+        let value: any = setMatch[2].trim();
+        // Try parse JSON for complex fields
+        if ((value.startsWith('{') && value.endsWith('}')) || (value.startsWith('[') && value.endsWith(']'))) {
+          try { value = JSON.parse(value); } catch (e) {}
+        }
+
+        const current = await this.storage.getIdentity();
+        const updates: any = {};
+        if (['values', 'interests', 'knowledgeDomains'].includes(key)) {
+          // comma separated
+          const arr = typeof value === 'string' ? value.split(',').map(s => s.trim()).filter(Boolean) : value;
+          updates[key] = Array.isArray(arr) ? arr : [arr];
+        } else if (['personalityTraits', 'dailySchedule', 'conversationRules'].includes(key)) {
+          updates[key] = typeof value === 'string' ? JSON.parse(value) : value;
+        } else if (key === 'name') {
+          updates.name = String(value);
+        } else {
+          // fallback: try to set as top-level field
+          updates[key] = value;
+        }
+
+        const updated = await this.updateCoreIdentity({ ...(current || {}), ...updates });
+        return { success: true, message: `Identity updated. Current name: ${updated.name}` };
+      }
+
+      // add_interest: @IDENTITY add_interest Topic
+      const addMatch = trimmed.match(/^@IDENTITY\s+add_interest\s+(.+)$/i);
+      if (addMatch) {
+        const topic = addMatch[1].trim();
+        const current = await this.storage.getIdentity();
+        const interests = (current?.interests || []).slice();
+        if (!interests.includes(topic)) interests.push(topic);
+        const updated = await this.updateCoreIdentity({ ...(current || {}), interests });
+        return { success: true, message: `Interest added: ${topic}` };
+      }
+
+      // remove_interest: @IDENTITY remove_interest Topic
+      const remMatch = trimmed.match(/^@IDENTITY\s+remove_interest\s+(.+)$/i);
+      if (remMatch) {
+        const topic = remMatch[1].trim();
+        const current = await this.storage.getIdentity();
+        const interests = (current?.interests || []).filter((i: string) => i !== topic);
+        const updated = await this.updateCoreIdentity({ ...(current || {}), interests });
+        return { success: true, message: `Interest removed: ${topic}` };
+      }
+
+      return { success: false, message: 'Unrecognized identity command.' };
+    } catch (e) {
+      console.error('Error applying trainer identity command:', e);
+      return { success: false, message: `Error: ${(e as Error).message}` };
+    }
   }
 
   /**
@@ -434,31 +608,18 @@ Return a JSON with these optional updates:
 }`;
 
     try {
-      let adaptationText = "";
+      // Use centralized AI service
+      const aiService = getAIService();
+      const response = await aiService.generateContent([
+        { role: "user", content: adaptPrompt }
+      ]);
 
-      if (this.gemini) {
-        try {
-          const result = await this.gemini.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts: [{ text: adaptPrompt }] }],
-          });
-          adaptationText = result.text || "";
-        } catch (geminiError) {
-          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
-          const completion = await this.openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: adaptPrompt }],
-          });
-          adaptationText = completion.choices[0]?.message?.content || "";
-        }
-      } else {
-        const completion = await this.openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "user", content: adaptPrompt }],
-        });
-        adaptationText = completion.choices[0]?.message?.content || "";
+      if (response.error) {
+        console.error(`AI Service error during personality analysis: ${response.error}`);
+        return currentPersonality;
       }
 
+      const adaptationText = response.content;
       const jsonMatch = adaptationText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const adaptations = JSON.parse(jsonMatch[0]);
@@ -555,31 +716,18 @@ Return as JSON:
 }`;
 
     try {
-      let extractionText = "";
+      // Use centralized AI service
+      const aiService = getAIService();
+      const response = await aiService.generateContent([
+        { role: "user", content: extractionPrompt }
+      ]);
 
-      if (this.gemini) {
-        try {
-          const result = await this.gemini.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts: [{ text: extractionPrompt }] }],
-          });
-          extractionText = result.text || "";
-        } catch (geminiError) {
-          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
-          const completion = await this.openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: extractionPrompt }],
-          });
-          extractionText = completion.choices[0]?.message?.content || "";
-        }
-      } else {
-        const completion = await this.openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "user", content: extractionPrompt }],
-        });
-        extractionText = completion.choices[0]?.message?.content || "";
+      if (response.error) {
+        console.error(`AI Service error during task extraction: ${response.error}`);
+        return { tasks: [], followUps: [] };
       }
 
+      const extractionText = response.content;
       const jsonMatch = extractionText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const extracted = JSON.parse(jsonMatch[0]);
@@ -693,31 +841,25 @@ Return as JSON:
 }`;
 
     try {
-      let summaryText = "";
+      // Use centralized AI service
+      const aiService = getAIService();
+      const response = await aiService.generateContent([
+        { role: "user", content: summaryPrompt }
+      ]);
 
-      if (this.gemini) {
-        try {
-          const result = await this.gemini.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts: [{ text: summaryPrompt }] }],
-          });
-          summaryText = result.text || "";
-        } catch (geminiError) {
-          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
-          const completion = await this.openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: summaryPrompt }],
-          });
-          summaryText = completion.choices[0]?.message?.content || "";
-        }
-      } else {
-        const completion = await this.openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "user", content: summaryPrompt }],
-        });
-        summaryText = completion.choices[0]?.message?.content || "";
+      if (response.error) {
+        console.error(`AI Service error during summary generation: ${response.error}`);
+        return {
+          contactId,
+          summary: "Summary could not be generated",
+          keyTopics: [],
+          recentInteractions: [],
+          relationshipStatus: "Unknown",
+          lastUpdated: new Date(),
+        };
       }
 
+      const summaryText = response.content;
       const jsonMatch = summaryText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const summaryData = JSON.parse(jsonMatch[0]);
@@ -781,7 +923,7 @@ Return as JSON:
     );
 
     try {
-      // Check if API keys are available
+      // Check if any API keys are available
       const hasOpenAI = process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim();
       const hasGemini = process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim();
       
@@ -790,69 +932,27 @@ Return as JSON:
         return "I appreciate your message, but I'm not able to respond right now due to missing API configuration. Please check back later.";
       }
 
-      if (this.gemini) {
-        try {
-          const chatMessages = messages.map((h) => ({
-            role: h.role === "user" ? ("user" as const) : ("model" as const),
-            parts: [{ text: h.content }],
-          }));
+      // Get the centralized AI service
+      const aiService = getAIService();
 
-          // Add system prompt to Gemini messages as first user message
-          const messagesWithSystem = [
-            {
-              role: "user" as const,
-              parts: [{ text: systemPrompt }],
-            },
-            ...chatMessages,
-          ];
-
-          const result = await this.gemini.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: messagesWithSystem,
-          });
-
-          return result.text || "I couldn't process that.";
-        } catch (geminiError) {
-          console.warn(`Gemini API error, falling back to OpenAI: ${(geminiError as Error)?.message}`);
-          if (!hasOpenAI) {
-            console.error("OpenAI API key not configured, cannot fallback");
-            return "I'm having trouble with my AI service right now. Please try again later.";
-          }
-          const chatMessages = messages.map((h) => ({
-            role: h.role as "user" | "assistant" | "system",
-            content: h.content,
-          }));
-
-          chatMessages.unshift({
-            role: "system" as const,
-            content: systemPrompt,
-          });
-
-          const completion = await this.openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: chatMessages as any,
-          });
-
-          return completion.choices[0]?.message?.content || "I couldn't process that.";
-        }
-      } else {
-        const chatMessages = messages.map((h) => ({
-          role: h.role as "user" | "assistant" | "system",
+      // Convert messages to AIMessage format
+      const aiMessages = [
+        { role: "user" as const, content: systemPrompt },
+        ...messages.map((h) => ({
+          role: (h.role === "user" ? "user" : "assistant") as "user" | "assistant",
           content: h.content,
-        }));
+        })),
+      ];
 
-        chatMessages.unshift({
-          role: "system" as const,
-          content: systemPrompt,
-        });
+      // Call AI service with automatic fallback
+      const response = await aiService.generateContent(aiMessages);
 
-        const completion = await this.openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: chatMessages as any,
-        });
-
-        return completion.choices[0]?.message?.content || "I couldn't process that.";
+      if (response.error) {
+        console.error(`AI Service error: ${response.error}`);
+        return "I'm sorry, I had trouble responding to that.";
       }
+
+      return response.content || "I couldn't process that.";
     } catch (error) {
       console.error(`Error generating response for contact ${contactId}:`, error);
       return "I'm sorry, I had trouble responding to that.";
@@ -1027,6 +1127,15 @@ Return as JSON:
       }
     }
 
+    // incorporate recent contact notes (background knowledge)
+    let contactNotesText = "";
+    if (typeof contactId === "number") {
+      const notes = await this.getContactNotes(contactId);
+      if (notes.length > 0) {
+        contactNotesText = `\nCONTACT NOTES (most recent first):\n` + notes.slice(-5).reverse().map(n => `- ${n.createdAt.toISOString()}: ${n.summary}${n.details ? ` -- ${n.details}` : ''}`).join('\n') + '\n';
+      }
+    }
+
     let prompt = `You are representing ${identity?.name || "a person"} in this conversation with ${contact?.name || "a contact"}.
 
 PERSONALITY PROFILE:
@@ -1062,12 +1171,11 @@ IMPORTANT RULES:
       prompt += `\n\n${trainerInstructionsText}`;
     }
 
+    // Append contact notes if present
+    if (contactNotesText) {
+      prompt += `\n\n${contactNotesText}`;
+    }
+
     return prompt;
   }
 }
-
-export const adminBotHandler = new AdminBotHandler(
-  null as any,
-  process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "",
-  process.env.AI_INTEGRATIONS_GEMINI_API_KEY
-);

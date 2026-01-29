@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { initializeAIService } from "./services/aiService";
 
 const app = express();
 const httpServer = createServer(app);
@@ -61,6 +62,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize AI Service with API keys from environment
+  const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "";
+  const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  
+  initializeAIService(openaiKey, geminiKey);
+  log("✓ AI Service initialized");
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
